@@ -9,6 +9,8 @@ export { default as Sidebar } from './layout/Sidebar';
 export { default as AddEmployeeForm } from './common/forms/AddEmployeeForm';
 export { default as LeaveRequestForm } from './common/forms/LeaveRequestForm';
 export { default as TimesheetForm } from './common/forms/TimesheetForm';
+export { default as ReimbursementRequestForm } from './common/forms/ReimbursementRequestForm';
+export { default as InventoryRequestForm } from './common/forms/InventoryRequestForm';
 
 // UI Components
 export { default as EmployeeTable } from './ui/EmployeeTable';

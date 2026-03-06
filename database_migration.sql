@@ -407,6 +407,197 @@ CREATE TRIGGER trigger_holidays_updated_at
 -- ON CONFLICT (date) DO UPDATE SET name = EXCLUDED.name;
 
 -- ============================================
+-- REIMBURSEMENT_REQUESTS TABLE
+-- ============================================
+CREATE TABLE IF NOT EXISTS public.reimbursement_requests (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    employee_id UUID NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    description TEXT NOT NULL,
+    amount DECIMAL(10, 2) NOT NULL,
+    date DATE NOT NULL,
+    status VARCHAR(20) DEFAULT 'pending',
+    receipt_name VARCHAR(255),
+    receipt_url TEXT,
+    receipt_path TEXT,
+    receipt_type VARCHAR(50),
+    receipt_size INTEGER,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    FOREIGN KEY (employee_id) REFERENCES public.employees(employee_id) ON DELETE CASCADE
+);
+
+-- Indexes for reimbursement_requests
+CREATE INDEX IF NOT EXISTS idx_reimbursement_requests_employee_id ON public.reimbursement_requests(employee_id);
+CREATE INDEX IF NOT EXISTS idx_reimbursement_requests_status ON public.reimbursement_requests(status);
+CREATE INDEX IF NOT EXISTS idx_reimbursement_requests_date ON public.reimbursement_requests(date);
+CREATE INDEX IF NOT EXISTS idx_reimbursement_requests_created_at ON public.reimbursement_requests(created_at);
+
+-- Enable RLS for reimbursement_requests
+ALTER TABLE public.reimbursement_requests ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow reimbursement request operations" ON public.reimbursement_requests
+FOR ALL USING (true);
+
+-- Trigger to update updated_at timestamp
+CREATE OR REPLACE FUNCTION update_reimbursement_requests_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_reimbursement_requests_updated_at
+    BEFORE UPDATE ON public.reimbursement_requests
+    FOR EACH ROW
+    EXECUTE FUNCTION update_reimbursement_requests_updated_at();
+
+-- ============================================
+-- INVENTORY_ITEMS TABLE
+-- ============================================
+CREATE TABLE IF NOT EXISTS public.inventory_items (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    employee_id UUID NOT NULL,
+    item_name VARCHAR(255) NOT NULL,
+    item_details TEXT,
+    category VARCHAR(100) NOT NULL,
+    serial_number VARCHAR(100),
+    condition VARCHAR(20) DEFAULT 'new',
+    status VARCHAR(20) DEFAULT 'assigned',
+    item_image_name VARCHAR(255),
+    item_image_url TEXT,
+    item_image_path TEXT,
+    item_image_type VARCHAR(50),
+    item_image_size INTEGER,
+    invoice_image_name VARCHAR(255),
+    invoice_image_url TEXT,
+    invoice_image_path TEXT,
+    invoice_image_type VARCHAR(50),
+    invoice_image_size INTEGER,
+    assigned_date DATE DEFAULT CURRENT_DATE,
+    added_by VARCHAR(100) DEFAULT 'Employee',
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    FOREIGN KEY (employee_id) REFERENCES public.employees(employee_id) ON DELETE CASCADE
+);
+
+-- Indexes for inventory_items
+CREATE INDEX IF NOT EXISTS idx_inventory_items_employee_id ON public.inventory_items(employee_id);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_status ON public.inventory_items(status);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_category ON public.inventory_items(category);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_assigned_date ON public.inventory_items(assigned_date);
+CREATE INDEX IF NOT EXISTS idx_inventory_items_created_at ON public.inventory_items(created_at);
+
+-- Enable RLS for inventory_items
+ALTER TABLE public.inventory_items ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow inventory item operations" ON public.inventory_items
+FOR ALL USING (true);
+
+-- Trigger to update updated_at timestamp
+CREATE OR REPLACE FUNCTION update_inventory_items_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trigger_inventory_items_updated_at
+    BEFORE UPDATE ON public.inventory_items
+    FOR EACH ROW
+    EXECUTE FUNCTION update_inventory_items_updated_at();
+
+-- ============================================
+-- SAMPLE DATA FOR REIMBURSEMENT_REQUESTS
+-- ============================================
+-- Uncomment to insert sample data
+-- INSERT INTO public.reimbursement_requests (employee_id, category, description, amount, date, status, receipt_name)
+-- SELECT 
+--     e.employee_id,
+--     'Office Supplies',
+--     'Purchased keyboard and mouse for workstation',
+--     2500.00,
+--     '2024-01-10',
+--     'approved',
+--     'receipt_keyboard.jpg'
+-- FROM public.employees e
+-- WHERE e.email = 'john.doe@company.com'
+-- ON CONFLICT DO NOTHING;
+
+-- ============================================
+-- SAMPLE DATA FOR INVENTORY_ITEMS
+-- ============================================
+-- Uncomment to insert sample data
+-- INSERT INTO public.inventory_items (employee_id, item_name, item_details, category, serial_number, condition, status, item_image_name, invoice_image_name, added_by)
+-- SELECT 
+--     e.employee_id,
+--     'MacBook Pro 14"',
+--     'M3 Pro, 18GB RAM, 512GB SSD',
+--     'Laptop',
+--     'MBP-2024-0042',
+--     'new',
+--     'assigned',
+--     'macbook_pro_14.jpg',
+--     'macbook_invoice.pdf',
+--     'Admin'
+-- FROM public.employees e
+-- WHERE e.email = 'john.doe@company.com'
+-- ON CONFLICT DO NOTHING;
+
+-- ============================================
+-- STORAGE BUCKET SETUP FOR EMS_BUCKET
+-- ============================================
+-- These policies allow authenticated employees to upload files to EMS_bucket
+
+-- Enable RLS on storage.objects (if not already enabled)
+ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Allow authenticated users to upload files to EMS_bucket
+CREATE POLICY "Allow authenticated uploads to EMS_bucket"
+ON storage.objects
+FOR INSERT
+TO authenticated
+WITH CHECK (bucket_id = 'EMS_bucket');
+
+-- Policy: Allow public uploads (for custom authentication systems)
+CREATE POLICY "Allow public uploads to EMS_bucket"
+ON storage.objects
+FOR INSERT
+TO public
+WITH CHECK (bucket_id = 'EMS_bucket');
+
+-- Policy: Allow authenticated users to read files from EMS_bucket
+CREATE POLICY "Allow authenticated read from EMS_bucket"
+ON storage.objects
+FOR SELECT
+TO authenticated
+USING (bucket_id = 'EMS_bucket');
+
+-- Policy: Allow public read from EMS_bucket (for viewing uploaded files)
+CREATE POLICY "Allow public read from EMS_bucket"
+ON storage.objects
+FOR SELECT
+TO public
+USING (bucket_id = 'EMS_bucket');
+
+-- Policy: Allow authenticated users to update their own files
+CREATE POLICY "Allow authenticated updates to EMS_bucket"
+ON storage.objects
+FOR UPDATE
+TO authenticated
+USING (bucket_id = 'EMS_bucket')
+WITH CHECK (bucket_id = 'EMS_bucket');
+
+-- Policy: Allow authenticated users to delete their own files
+CREATE POLICY "Allow authenticated delete from EMS_bucket"
+ON storage.objects
+FOR DELETE
+TO authenticated
+USING (bucket_id = 'EMS_bucket');
+
+-- ============================================
 -- VERIFICATION QUERIES
 -- ============================================
 -- After running the script, use these queries to verify:
@@ -422,4 +613,13 @@ CREATE TRIGGER trigger_holidays_updated_at
 -- FROM holidays 
 -- GROUP BY EXTRACT(YEAR FROM date) 
 -- ORDER BY year;
+
+-- Check reimbursement requests
+-- SELECT * FROM reimbursement_requests LIMIT 10;
+
+-- Check inventory items
+-- SELECT * FROM inventory_items LIMIT 10;
+
+-- Check storage policies
+-- SELECT * FROM pg_policies WHERE tablename = 'objects' AND schemaname = 'storage';
 

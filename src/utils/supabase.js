@@ -2213,3 +2213,474 @@ export const accountDetailsApi = {
     }
 };
 
+// ============================================
+// EMS STORAGE API - For file uploads to EMS_bucket
+// ============================================
+export const emsStorageApi = {
+    // Upload file to EMS_bucket with employee authentication
+    async uploadFile(file, folder = 'general', employeeId = null) {
+        try {
+            if (!file) {
+                throw new Error('No file provided');
+            }
+
+            // Get current user session for authentication
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+            
+            if (sessionError) {
+                console.error('❌ Session error:', sessionError);
+                throw new Error('Authentication required to upload files');
+            }
+
+            // Generate organized file path with employee ID and timestamp
+            const fileExt = file.name.split('.').pop();
+            const timestamp = Date.now();
+            const randomString = Math.random().toString(36).substring(7);
+            const userPrefix = employeeId ? `emp-${employeeId}` : 'user';
+            const fileName = `${folder}/${userPrefix}/${timestamp}-${randomString}.${fileExt}`;
+
+            console.log('📤 Uploading file to EMS_bucket:', {
+                fileName: file.name,
+                fileSize: file.size,
+                fileType: file.type,
+                destination: fileName,
+                authenticated: !!session
+            });
+
+            // Upload file to EMS_bucket with proper headers
+            const { data, error } = await supabase.storage
+                .from('EMS_bucket')
+                .upload(fileName, file, {
+                    cacheControl: '3600',
+                    upsert: false,
+                    contentType: file.type
+                });
+
+            if (error) {
+                console.error('❌ Error uploading file:', error);
+                // Check for specific RLS error
+                if (error.message?.includes('row-level security') || error.message?.includes('violates')) {
+                    throw new Error('Permission denied: Please ensure you are logged in and have upload permissions');
+                }
+                throw error;
+            }
+
+            // Get public URL for the uploaded file
+            const { data: { publicUrl } } = supabase.storage
+                .from('EMS_bucket')
+                .getPublicUrl(fileName);
+
+            console.log('✅ File uploaded successfully:', publicUrl);
+
+            return {
+                path: data.path,
+                publicUrl: publicUrl,
+                fileName: file.name,
+                fileSize: file.size,
+                fileType: file.type,
+                uploadedBy: employeeId,
+                uploadedAt: new Date().toISOString()
+            };
+        } catch (error) {
+            console.error('❌ File upload failed:', error);
+            throw new Error(`Failed to upload file: ${error.message}`);
+        }
+    },
+
+    // Delete file from EMS_bucket
+    async deleteFile(filePath) {
+        try {
+            const { error } = await supabase.storage
+                .from('EMS_bucket')
+                .remove([filePath]);
+
+            if (error) {
+                console.error('❌ Error deleting file:', error);
+                throw error;
+            }
+
+            console.log('✅ File deleted successfully:', filePath);
+            return true;
+        } catch (error) {
+            console.error('❌ File deletion failed:', error);
+            throw new Error(`Failed to delete file: ${error.message}`);
+        }
+    }
+};
+
+// ============================================
+// REIMBURSEMENT REQUESTS API
+// ============================================
+export const reimbursementApi = {
+    // Create a new reimbursement request with file upload
+    async createRequest(requestData, receiptFile = null) {
+        console.log('💰 Creating reimbursement request:', requestData);
+        
+        let receiptUrl = null;
+        let receiptPath = null;
+        
+        // Upload receipt file if provided
+        if (receiptFile) {
+            try {
+                const uploadResult = await emsStorageApi.uploadFile(
+                    receiptFile, 
+                    'reimbursements/receipts',
+                    requestData.employee_id
+                );
+                receiptUrl = uploadResult.publicUrl;
+                receiptPath = uploadResult.path;
+            } catch (uploadError) {
+                console.error('❌ Failed to upload receipt:', uploadError);
+                throw new Error('Failed to upload receipt file');
+            }
+        }
+        
+        const { data, error } = await supabase
+            .from('reimbursement_requests')
+            .insert([{
+                employee_id: requestData.employee_id,
+                category: requestData.category,
+                description: requestData.description,
+                amount: requestData.amount,
+                date: requestData.date,
+                status: 'pending',
+                receipt_name: receiptFile?.name || requestData.receipt_name,
+                receipt_url: receiptUrl,
+                receipt_path: receiptPath,
+                receipt_type: receiptFile?.type || requestData.receipt_type,
+                receipt_size: receiptFile?.size || requestData.receipt_size
+            }])
+            .select()
+            .single();
+        
+        if (error) {
+            // Try to delete uploaded file if database insert fails
+            if (receiptPath) {
+                try {
+                    await emsStorageApi.deleteFile(receiptPath);
+                } catch (deleteError) {
+                    console.error('⚠️ Failed to cleanup uploaded file:', deleteError);
+                }
+            }
+            console.error('❌ Error creating reimbursement request:', error);
+            throw error;
+        }
+        
+        console.log('✅ Reimbursement request created:', data);
+        return data;
+    },
+
+    // Get all reimbursement requests for an employee
+    async getRequestsByEmployee(employeeId) {
+        console.log('📋 Getting reimbursement requests for employee:', employeeId);
+        
+        const { data, error } = await supabase
+            .from('reimbursement_requests')
+            .select('*')
+            .eq('employee_id', employeeId)
+            .order('created_at', { ascending: false });
+        
+        if (error) {
+            console.error('❌ Error fetching reimbursement requests:', error);
+            throw error;
+        }
+        
+        return data || [];
+    },
+
+    // Get reimbursement statistics for an employee
+    async getReimbursementStats(employeeId) {
+        console.log('📊 Getting reimbursement stats for employee:', employeeId);
+        
+        const { data, error } = await supabase
+            .from('reimbursement_requests')
+            .select('status, amount')
+            .eq('employee_id', employeeId);
+        
+        if (error) {
+            console.error('❌ Error fetching reimbursement stats:', error);
+            throw error;
+        }
+        
+        const stats = {
+            pending: 0,
+            approved: 0,
+            rejected: 0
+        };
+        
+        (data || []).forEach(req => {
+            if (stats[req.status] !== undefined) {
+                stats[req.status] += parseFloat(req.amount);
+            }
+        });
+        
+        return stats;
+    },
+
+    // Update reimbursement request status (admin only)
+    async updateStatus(requestId, status) {
+        console.log('🔄 Updating reimbursement request status:', requestId, status);
+        
+        const { data, error } = await supabase
+            .from('reimbursement_requests')
+            .update({ status })
+            .eq('id', requestId)
+            .select()
+            .single();
+        
+        if (error) {
+            console.error('❌ Error updating reimbursement status:', error);
+            throw error;
+        }
+        
+        return data;
+    },
+
+    // Delete a reimbursement request
+    async deleteRequest(requestId) {
+        console.log('🗑️ Deleting reimbursement request:', requestId);
+        
+        const { error } = await supabase
+            .from('reimbursement_requests')
+            .delete()
+            .eq('id', requestId);
+        
+        if (error) {
+            console.error('❌ Error deleting reimbursement request:', error);
+            throw error;
+        }
+        
+        return true;
+    },
+
+    // Get all reimbursement requests (for admin)
+    async getAllRequests() {
+        console.log('📋 Getting all reimbursement requests (admin)');
+        
+        const { data, error } = await supabase
+            .from('reimbursement_requests')
+            .select(`
+                *,
+                employees:employee_id (
+                    name,
+                    email,
+                    employee_id
+                )
+            `)
+            .order('created_at', { ascending: false });
+        
+        if (error) {
+            console.error('❌ Error fetching all reimbursement requests:', error);
+            throw error;
+        }
+        
+        return data || [];
+    }
+};
+
+// ============================================
+// INVENTORY ITEMS API
+// ============================================
+export const inventoryApi = {
+    // Create a new inventory item with image uploads
+    async createItem(itemData, itemImageFile = null, invoiceImageFile = null) {
+        console.log('📦 Creating inventory item:', itemData);
+        
+        let itemImageUrl = null;
+        let itemImagePath = null;
+        let invoiceImageUrl = null;
+        let invoiceImagePath = null;
+        const uploadedFiles = [];
+        
+        // Upload item image if provided
+        if (itemImageFile) {
+            try {
+                const uploadResult = await emsStorageApi.uploadFile(
+                    itemImageFile, 
+                    'inventory/item-images',
+                    itemData.employee_id
+                );
+                itemImageUrl = uploadResult.publicUrl;
+                itemImagePath = uploadResult.path;
+                uploadedFiles.push(itemImagePath);
+            } catch (uploadError) {
+                console.error('❌ Failed to upload item image:', uploadError);
+                throw new Error('Failed to upload item image');
+            }
+        }
+        
+        // Upload invoice image if provided
+        if (invoiceImageFile) {
+            try {
+                const uploadResult = await emsStorageApi.uploadFile(
+                    invoiceImageFile, 
+                    'inventory/invoice-images',
+                    itemData.employee_id
+                );
+                invoiceImageUrl = uploadResult.publicUrl;
+                invoiceImagePath = uploadResult.path;
+                uploadedFiles.push(invoiceImagePath);
+            } catch (uploadError) {
+                console.error('❌ Failed to upload invoice image:', uploadError);
+                // Cleanup already uploaded files
+                for (const filePath of uploadedFiles) {
+                    try {
+                        await emsStorageApi.deleteFile(filePath);
+                    } catch (deleteError) {
+                        console.error('⚠️ Failed to cleanup uploaded file:', deleteError);
+                    }
+                }
+                throw new Error('Failed to upload invoice image');
+            }
+        }
+        
+        const { data, error } = await supabase
+            .from('inventory_items')
+            .insert([{
+                employee_id: itemData.employee_id,
+                item_name: itemData.item_name,
+                item_details: itemData.item_details,
+                category: itemData.category,
+                serial_number: itemData.serial_number,
+                condition: itemData.condition || 'new',
+                status: 'assigned',
+                item_image_name: itemImageFile?.name || itemData.item_image_name,
+                item_image_url: itemImageUrl,
+                item_image_path: itemImagePath,
+                item_image_type: itemImageFile?.type || itemData.item_image_type,
+                item_image_size: itemImageFile?.size || itemData.item_image_size,
+                invoice_image_name: invoiceImageFile?.name || itemData.invoice_image_name,
+                invoice_image_url: invoiceImageUrl,
+                invoice_image_path: invoiceImagePath,
+                invoice_image_type: invoiceImageFile?.type || itemData.invoice_image_type,
+                invoice_image_size: invoiceImageFile?.size || itemData.invoice_image_size,
+                added_by: itemData.added_by || 'Employee'
+            }])
+            .select()
+            .single();
+        
+        if (error) {
+            // Cleanup uploaded files if database insert fails
+            for (const filePath of uploadedFiles) {
+                try {
+                    await emsStorageApi.deleteFile(filePath);
+                } catch (deleteError) {
+                    console.error('⚠️ Failed to cleanup uploaded file:', deleteError);
+                }
+            }
+            console.error('❌ Error creating inventory item:', error);
+            throw error;
+        }
+        
+        console.log('✅ Inventory item created:', data);
+        return data;
+    },
+
+    // Get all inventory items for an employee
+    async getItemsByEmployee(employeeId) {
+        console.log('📋 Getting inventory items for employee:', employeeId);
+        
+        const { data, error } = await supabase
+            .from('inventory_items')
+            .select('*')
+            .eq('employee_id', employeeId)
+            .order('created_at', { ascending: false });
+        
+        if (error) {
+            console.error('❌ Error fetching inventory items:', error);
+            throw error;
+        }
+        
+        return data || [];
+    },
+
+    // Get inventory statistics for an employee
+    async getInventoryStats(employeeId) {
+        console.log('📊 Getting inventory stats for employee:', employeeId);
+        
+        const { data, error } = await supabase
+            .from('inventory_items')
+            .select('status')
+            .eq('employee_id', employeeId);
+        
+        if (error) {
+            console.error('❌ Error fetching inventory stats:', error);
+            throw error;
+        }
+        
+        const stats = {
+            assigned: 0,
+            pending: 0,
+            returned: 0
+        };
+        
+        (data || []).forEach(item => {
+            if (stats[item.status] !== undefined) {
+                stats[item.status]++;
+            }
+        });
+        
+        return stats;
+    },
+
+    // Update inventory item status
+    async updateStatus(itemId, status) {
+        console.log('🔄 Updating inventory item status:', itemId, status);
+        
+        const { data, error } = await supabase
+            .from('inventory_items')
+            .update({ status })
+            .eq('id', itemId)
+            .select()
+            .single();
+        
+        if (error) {
+            console.error('❌ Error updating inventory status:', error);
+            throw error;
+        }
+        
+        return data;
+    },
+
+    // Delete an inventory item
+    async deleteItem(itemId) {
+        console.log('🗑️ Deleting inventory item:', itemId);
+        
+        const { error } = await supabase
+            .from('inventory_items')
+            .delete()
+            .eq('id', itemId);
+        
+        if (error) {
+            console.error('❌ Error deleting inventory item:', error);
+            throw error;
+        }
+        
+        return true;
+    },
+
+    // Get all inventory items (for admin)
+    async getAllItems() {
+        console.log('📋 Getting all inventory items (admin)');
+        
+        const { data, error } = await supabase
+            .from('inventory_items')
+            .select(`
+                *,
+                employees:employee_id (
+                    name,
+                    email,
+                    employee_id
+                )
+            `)
+            .order('created_at', { ascending: false });
+        
+        if (error) {
+            console.error('❌ Error fetching all inventory items:', error);
+            throw error;
+        }
+        
+        return data || [];
+    }
+};
+

@@ -69,13 +69,22 @@
 .stats-card_header{
     width: 100% ;
     display: flex;
-    justify-content: space-between;
+    gap: 30px;
 }
 .stats-card_container{
-    padding: 0  10px !important;
+    padding: 5px 15px !important;
+}
+.stats-card_header_right{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 50px;
+    justify-content: center;
+    padding: 10px;
+    border-radius: 10px;
 }
 .progress_icons{
-    width: 15px ;
+    width: 25px ;
     /* height: 10px ; */
 }
 .Clock{
@@ -405,4 +414,322 @@
 
 .dialog-content::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
+}
+
+/* ============================================
+   REIMBURSEMENT & INVENTORY SECTION STYLES
+   ============================================ */
+
+/* Tabs Container */
+.dashboard-tabs-container {
+  margin-bottom: 1.5rem;
+}
+
+.dashboard-tabs-list {
+  background-color: #f3f4f6;
+  padding: 6px;
+  height: 40px !important;
+  border-radius: 8px;
+  display: inline-flex;
+  gap: 4px;
+}
+
+.dashboard-tab-trigger {
+  padding: 17px 30px;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #6b7280;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.dashboard-tab-trigger[data-state="active"] {
+  background-color: white;
+  color: #111827;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.dashboard-tab-trigger:hover:not([data-state="active"]) {
+  color: #374151;
+}
+
+/* Section Container */
+.section-container {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+  padding: 0 0 1rem 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.section-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 0.25rem;
+}
+
+.section-subtitle {
+  color: #6b7280;
+  font-size: 0.875rem;
+}
+
+/* 3-Column Stats Grid */
+.stats-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 25px;
+  box-sizing: border-box;
+}
+
+/* Section Table Styles */
+.section-table-container {
+  padding: 20px;
+}
+
+.reimbursement-table-wrapper {
+  overflow-x: auto;
+}
+
+.reimbursement-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.reimbursement-table th {
+  text-align: left;
+  padding: 12px 16px;
+  font-weight: 500;
+  color: #6b7280;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 0.875rem;
+}
+
+.reimbursement-table td {
+  padding: 16px;
+  border-bottom: 1px solid #f3f4f6;
+  vertical-align: middle;
+}
+
+.reimbursement-table tr:hover {
+  background-color: #f9fafb;
+}
+
+/* Category Badge */
+.category-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  background-color: #f3f4f6;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  color: #374151;
+  font-weight: 500;
+}
+
+/* Status Badge Pills */
+.status-badge-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.status-badge-pill.approved {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.status-badge-pill.pending {
+  background-color: #e9e8e3;
+  color: #3d3d3d;
+}
+
+/* Select dropdown z-index fix for modal dialogs */
+.select-content-high-zindex {
+  z-index: 100 !important;
+}
+
+/* ============================================
+   INVENTORY TABLE STYLES
+   ============================================ */
+
+.inventory-table-wrapper {
+  overflow-x: auto;
+}
+
+.inventory-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.inventory-table th {
+  text-align: left;
+  padding: 12px 16px;
+  font-weight: 500;
+  color: #6b7280;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.inventory-table td {
+  padding: 16px;
+  border-bottom: 1px solid #f3f4f6;
+  vertical-align: middle;
+}
+
+.inventory-table tr:hover {
+  background-color: #f9fafb;
+}
+
+/* Inventory Category Badge */
+.inventory-category-badge {
+  display: inline-flex;
+  align-items: center;
+  padding:  0px 10px !important;
+  background-color: transparent !important;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  color: #374151;
+  font-weight: 500;
+  border: 1px solid #e5e7eb;
+}
+
+/* Inventory Condition Badge */
+.inventory-condition-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-transform: lowercase;
+}
+
+.inventory-condition-badge.new {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.inventory-condition-badge.good {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+.inventory-condition-badge.fair {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+.inventory-condition-badge.poor {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+/* Responsive Inventory Table */
+@media (max-width: 768px) {
+  .inventory-table th,
+  .inventory-table td {
+    padding: 12px 8px;
+    font-size: 0.875rem;
+  }
+  
+  .inventory-table th:nth-child(3),
+  .inventory-table td:nth-child(3),
+  .inventory-table th:nth-child(6),
+  .inventory-table td:nth-child(6) {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .inventory-table th:nth-child(5),
+  .inventory-table td:nth-child(5) {
+    display: none;
+  }
+  
+  .inventory-category-badge,
+  .inventory-condition-badge {
+    font-size: 0.75rem;
+    padding: 3px 8px;
+  }
+}
+
+.status-badge-pill.rejected {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.status-badge-pill.assigned {
+  background-color: #dbeafe;
+  color: #1e40af;
+}
+
+/* Responsive Adjustments for New Sections */
+@media (max-width: 768px) {
+  .stats-grid-3 {
+    grid-template-columns: repeat(1, 1fr);
+    gap: 1rem;
+  }
+  
+  .section-header {
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .reimbursement-table th,
+  .reimbursement-table td {
+    padding: 12px 8px;
+    font-size: 0.875rem;
+  }
+  
+  .dashboard-tabs-list {
+    width: 100%;
+    display: flex;
+  }
+  
+  .dashboard-tab-trigger {
+    flex: 1;
+    text-align: center;
+    padding: 8px 12px;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 1024px) {
+  .stats-grid-3 {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+  }
+}
+
+/* Mobile First - 320px and up */
+@media (max-width: 480px) {
+  .section-title {
+    font-size: 1.25rem;
+  }
+  
+  .section-table-container {
+    padding: 15px;
+  }
+  
+  .category-badge {
+    font-size: 0.75rem;
+    padding: 3px 8px;
+  }
+  
+  .status-badge-pill {
+    font-size: 0.75rem;
+    padding: 4px 8px;
+  }
 }
