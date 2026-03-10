@@ -45,10 +45,14 @@ const Login = () => {
         setLoading(true);
         setError('');
 
+        // Trim whitespace from email and password
+        const trimmedEmail = credentials.email.trim();
+        const trimmedPassword = credentials.password.trim();
+
         try {
             const user = await login({
-                email: credentials.email,
-                password: credentials.password
+                email: trimmedEmail,
+                password: trimmedPassword
             });
             
             navigate(from === '/' ? '/' : from, { replace: true });
@@ -80,9 +84,12 @@ const Login = () => {
         setResetError('');
         setResetSuccess('');
 
+        // Trim whitespace from reset email
+        const trimmedResetEmail = resetEmail.trim();
+
         try {
             // Add your password reset API call here
-            // Example: await resetPassword(resetEmail);
+            // Example: await resetPassword(trimmedResetEmail);
             
             // Simulated API call - replace with your actual API
             await new Promise(resolve => setTimeout(resolve, 1500));
