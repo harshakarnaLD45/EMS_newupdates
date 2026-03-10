@@ -174,10 +174,10 @@ const Login = () => {
                         </div>
                     </div>
 
-                    <div style={{ 
-                        textAlign: 'right', 
-                        marginTop: '-0.5rem', 
-                        marginBottom: '1rem' 
+                    <div style={{
+                        textAlign: 'right',
+                        marginTop: '-0.5rem',
+                        marginBottom: '1rem'
                     }}>
                         <button
                             type="button"

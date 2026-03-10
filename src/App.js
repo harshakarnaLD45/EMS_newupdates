@@ -12,7 +12,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LeaveProvider } from './contexts/LeaveContext';
 import { EmployeeProvider } from './contexts/EmployeeContext';
 import Attendance from './pages/attendencepage/attendencepage.js';
-// import AccountDetails from './pages/Accdetails/accountdetails.js';
+import { Toaster } from './components/ui/sonner';
 
 const DefaultRedirect = () => {
   const { isAdmin, isEmployee } = useAuth();
@@ -29,6 +29,7 @@ function App() {
         <AuthProvider>
           <EmployeeProvider>
             <LeaveProvider>
+              <Toaster />
               <Routes>
                 
                 <Route path="/login" element={<Login />} />
@@ -53,7 +54,6 @@ function App() {
                   <Route path="leave" element={<Leave />} />
                   <Route path="attendance" element={<Attendance />} />
                   <Route path="profile" element={<ProfilePage />} />
-                  {/* <Route path="account-details" element={<AccountDetails />} /> */}
 
                   {/* Admin-only Routes */}
                   <Route

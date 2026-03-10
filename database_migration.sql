@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS public.admins (
     password varchar NOT NULL,
     role varchar DEFAULT 'admin',
     is_active boolean DEFAULT true,
+    is_super_admin boolean DEFAULT false,
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now()
 );
@@ -236,9 +237,28 @@ FOR ALL USING (true);
 -- ==========================================
 -- SAMPLE DATA
 -- ==========================================
-INSERT INTO public.admins (name, email, password, role)
-VALUES ('System Admin', 'admin@company.com', 'admin123', 'admin')
-ON CONFLICT (email) DO NOTHING;
+INSERT INTO public.admins (name, email, password, role, first_name, last_name, department, position, status, is_active)
+VALUES ('System Admin', 'admin@company.com', 'admin123', 'admin', 'System', 'Admin', 'Administration', 'Administrator', 'Active', true)
+ON CONFLICT (email) DO UPDATE SET 
+    first_name = EXCLUDED.first_name,
+    last_name = EXCLUDED.last_name,
+    department = EXCLUDED.department,
+    position = EXCLUDED.position,
+    status = EXCLUDED.status,
+    is_active = EXCLUDED.is_active;
+
+-- Insert Super Admin (info@ldintertech.com) - uneditable and cannot be terminated by other admins
+INSERT INTO public.admins (name, email, password, role, first_name, last_name, department, position, status, is_active, is_super_admin)
+VALUES ('Super Admin', 'info@ldintertech.com', 'admin123', 'super_admin', 'Super', 'Admin', 'Administration', 'Super Administrator', 'Active', true, true)
+ON CONFLICT (email) DO UPDATE SET 
+    role = 'super_admin',
+    is_super_admin = true,
+    first_name = EXCLUDED.first_name,
+    last_name = EXCLUDED.last_name,
+    department = EXCLUDED.department,
+    position = EXCLUDED.position,
+    status = EXCLUDED.status,
+    is_active = EXCLUDED.is_active;
 
 INSERT INTO public.employees (name, email, phone, department, position, first_name, last_name, password_hash)
 VALUES
@@ -247,10 +267,10 @@ VALUES
 ('Bob Johnson', 'bob.johnson@company.com', '+1234567892', 'Sales', 'Sales Representative', 'Bob', 'Johnson', 'password123')
 ON CONFLICT (email) DO NOTHING;
 
--- ========================================== 
--- EMS v2 - 2026 
---Leave Balances Initialization 
--- ========================================== 
+-- ==========================================
+-- EMS v2 - 2026
+--Leave Balances Initialization
+-- ==========================================
 INSERT INTO public.leave_balances (
     employee_id,
     year,

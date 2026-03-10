@@ -557,7 +557,11 @@
 
 /* Select dropdown z-index fix for modal dialogs */
 .select-content-high-zindex {
-  z-index: 100 !important;
+  z-index: 9999 !important;
+}
+
+.select-content-high-zindex [data-radix-popper-content-wrapper] {
+  z-index: 9999 !important;
 }
 
 /* ============================================

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, Wand2 } from 'lucide-react';
+import { Eye, EyeOff, Wand2, Shield } from 'lucide-react';
 import { useEmployees } from '../../../contexts/EmployeeContext';
+import { useAuth } from '../../../contexts/AuthContext';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
@@ -15,27 +16,49 @@ const AddEmployeeForm = ({ mode = 'add', employeeData = null, onClose, onSuccess
         phone: '',
         department: '',
         position: '',
+        role: 'Employee',
         joinDate: '',
-        password: ''
+        password: '',
+        isActive: true
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
-    const { addEmployee, updateEmployee, getPositionOptions } = useEmployees();
+    const { addEmployee, addAdmin, updateEmployee, updateAdmin, getPositionOptions } = useEmployees();
+    const { user } = useAuth();
+    
+    // Check if current user is Super Admin (using boolean field with backward compatibility)
+    const isCurrentUserSuperAdmin = user?.is_super_admin === true || user?.role === 'super_admin';
+    
+    // Check if editing an admin
+    const isEditingAdmin = mode === 'edit' && (employeeData?.role === 'admin' || employeeData?.role === 'super_admin' || employeeData?.isAdmin === true || employeeData?.is_super_admin === true);
+    
+    // Check if editing the Super Admin account
+    const isEditingSuperAdmin = mode === 'edit' && (employeeData?.is_super_admin === true || employeeData?.role === 'super_admin');
+    
+    // Check if current user can edit this account
+    // Super Admin can edit themselves, but regular admins cannot edit Super Admin
+    const canEditAccount = !isEditingSuperAdmin || isCurrentUserSuperAdmin;
 
     const departments = ['Administration', 'Development', 'Design', 'Interns'];
 
-    // Load employee data when in edit mode
+    // Load employee/admin data when in edit mode
     React.useEffect(() => {
         if (mode === 'edit' && employeeData) {
+            // Determine if this is an admin or employee
+            const isAdmin = employeeData.role === 'admin' || employeeData.isAdmin === true;
+            
             setFormData({
-                firstName: employeeData.first_name || '',
-                lastName: employeeData.last_name || '',
+                firstName: employeeData.first_name || employeeData.name?.split(' ')[0] || '',
+                lastName: employeeData.last_name || employeeData.name?.split(' ').slice(1).join(' ') || '',
                 email: employeeData.email || '',
                 phone: employeeData.phone || '',
-                department: employeeData.department || '',
-                position: employeeData.position || '',
-                joinDate: employeeData.join_date ? employeeData.join_date.split('T')[0] : '',
-                password: '' // Don't show existing password
+                department: employeeData.department || (isAdmin ? 'Administration' : ''),
+                position: employeeData.position || (isAdmin ? 'Administrator' : ''),
+                role: isAdmin ? 'Admin' : (employeeData.role || 'Employee'),
+                joinDate: employeeData.join_date ? employeeData.join_date.split('T')[0] : 
+                         (employeeData.created_at ? employeeData.created_at.split('T')[0] : ''),
+                password: '', // Don't show existing password
+                isActive: employeeData.is_active !== false // Default to true if not specified
             });
         }
     }, [mode, employeeData]);
@@ -46,50 +69,109 @@ const AddEmployeeForm = ({ mode = 'add', employeeData = null, onClose, onSuccess
 
         try {
             if (mode === 'edit') {
-                // Update existing employee
-                const updates = {
-                    first_name: formData.firstName,
-                    last_name: formData.lastName,
-                    name: `${formData.firstName} ${formData.lastName}`.trim(),
-                    email: formData.email,
-                    phone: formData.phone,
-                    department: formData.department,
-                    position: formData.position,
-                    join_date: formData.joinDate,
-                };
+                // Check if editing admin or employee
+                if (isEditingAdmin) {
+                    // Update existing admin
+                    // Preserve the original role and is_super_admin flag
+                    const updates = {
+                        first_name: formData.firstName,
+                        last_name: formData.lastName,
+                        name: `${formData.firstName} ${formData.lastName}`.trim(),
+                        email: formData.email,
+                        phone: formData.phone,
+                        department: formData.department || 'Administration',
+                        position: formData.position || 'Administrator',
+                        role: employeeData.role || 'Admin',
+                        is_super_admin: employeeData.is_super_admin === true,
+                        join_date: formData.joinDate,
+                        is_active: formData.isActive,
+                        status: formData.isActive ? 'Active' : 'Terminated'
+                    };
 
-                // Only update password if a new one was entered
-                if (formData.password) {
-                    updates.password = formData.password;
-                }
+                    // Only update password if a new one was entered
+                    if (formData.password) {
+                        updates.password = formData.password;
+                    }
 
-                await updateEmployee(employeeData.employee_id, updates);
-                onClose();
-                
-                if (onSuccess) {
-                    onSuccess(`Employee ${formData.firstName} ${formData.lastName} has been updated successfully!`);
+                    await updateAdmin(employeeData.id, updates);
+                    onClose();
+                    
+                    if (onSuccess) {
+                        onSuccess(`Admin ${formData.firstName} ${formData.lastName} has been updated successfully!`);
+                    }
+                } else {
+                    // Update existing employee
+                    const updates = {
+                        first_name: formData.firstName,
+                        last_name: formData.lastName,
+                        name: `${formData.firstName} ${formData.lastName}`.trim(),
+                        email: formData.email,
+                        phone: formData.phone,
+                        department: formData.department,
+                        position: formData.position,
+                        role: formData.role,
+                        join_date: formData.joinDate,
+                    };
+
+                    // Only update password if a new one was entered
+                    if (formData.password) {
+                        updates.password = formData.password;
+                    }
+
+                    await updateEmployee(employeeData.employee_id, updates);
+                    onClose();
+                    
+                    if (onSuccess) {
+                        onSuccess(`Employee ${formData.firstName} ${formData.lastName} has been updated successfully!`);
+                    }
                 }
             } else {
-                // Add new employee
-                const newEmployee = {
-                    first_name: formData.firstName,
-                    last_name: formData.lastName,
-                    name: `${formData.firstName} ${formData.lastName}`.trim(),
-                    email: formData.email,
-                    phone: formData.phone,
-                    department: formData.department,
-                    position: formData.position,
-                    status: 'Active',
-                    join_date: formData.joinDate,
-                    password: formData.password
-                };
+                // Check if adding Admin or Employee
+                if (formData.role === 'Admin') {
+                    // Add new admin with all fields
+                    const newAdmin = {
+                        first_name: formData.firstName,
+                        last_name: formData.lastName,
+                        name: `${formData.firstName} ${formData.lastName}`.trim(),
+                        email: formData.email,
+                        phone: formData.phone,
+                        password: formData.password,
+                        role: 'Admin',
+                        department: formData.department || 'Administration',
+                        position: formData.position || 'Administrator',
+                        join_date: formData.joinDate,
+                        is_active: true,
+                        status: 'Active'
+                    };
 
-                await addEmployee(newEmployee);
-                onClose();
-                
-                if (onSuccess) {
-                    onSuccess(`Employee ${formData.firstName} ${formData.lastName} has been added successfully!`);
+                    await addAdmin(newAdmin);
+                    
+                    if (onSuccess) {
+                        onSuccess(`Admin ${formData.firstName} ${formData.lastName} has been added successfully!`);
+                    }
+                } else {
+                    // Add new employee
+                    const newEmployee = {
+                        first_name: formData.firstName,
+                        last_name: formData.lastName,
+                        name: `${formData.firstName} ${formData.lastName}`.trim(),
+                        email: formData.email,
+                        phone: formData.phone,
+                        department: formData.department,
+                        position: formData.position,
+                        role: formData.role,
+                        status: 'Active',
+                        join_date: formData.joinDate,
+                        password: formData.password
+                    };
+
+                    await addEmployee(newEmployee);
+                    
+                    if (onSuccess) {
+                        onSuccess(`Employee ${formData.firstName} ${formData.lastName} has been added successfully!`);
+                    }
                 }
+                onClose();
 
                 // Reset form
                 setFormData({
@@ -99,8 +181,10 @@ const AddEmployeeForm = ({ mode = 'add', employeeData = null, onClose, onSuccess
                     phone: '',
                     department: '',
                     position: '',
+                    role: 'Employee',
                     joinDate: '',
-                    password: ''
+                    password: '',
+                    isActive: true
                 });
             }
         } catch (error) {
@@ -139,12 +223,85 @@ const AddEmployeeForm = ({ mode = 'add', employeeData = null, onClose, onSuccess
         handleInputChange('password', password);
     };
 
+    // Check if current user is a regular admin (not super admin)
+    const isRegularAdmin = user?.role === 'admin' && !isCurrentUserSuperAdmin;
+    
+    // Check if admin is editing their own account
+    const isEditingSelf = mode === 'edit' && user?.id === employeeData?.id;
+    
+    // If regular admin is trying to edit another admin account (not their own), show access denied
+    if (mode === 'edit' && isEditingAdmin && isRegularAdmin && !isEditingSelf) {
+        return (
+            <Card className="w-full max-w-2xl mx-auto">
+                <CardHeader>
+                    <div className="flex items-center gap-2">
+                        <Shield className="h-6 w-6 text-amber-500" />
+                        <CardTitle>Access Denied</CardTitle>
+                    </div>
+                    <CardDescription>
+                        You don't have access to edit these accounts.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                        <p className="text-amber-800 text-sm">
+                            As a regular admin, you can only edit your own account or employee accounts. 
+                            Other admin accounts can only be edited by the Super Admin.
+                            Please contact the Super Admin if you need to make changes to this account.
+                        </p>
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Account Details (Read-Only)</Label>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                                <span className="text-muted-foreground">Name:</span>
+                                <p className="font-medium">{employeeData?.name}</p>
+                            </div>
+                            <div>
+                                <span className="text-muted-foreground">Email:</span>
+                                <p className="font-medium">{employeeData?.email}</p>
+                            </div>
+                            <div>
+                                <span className="text-muted-foreground">Role:</span>
+                                <p className="font-medium text-amber-600">
+                                    {employeeData?.role === 'super_admin' ? 'Super Admin' : 'Admin'}
+                                </p>
+                            </div>
+                            <div>
+                                <span className="text-muted-foreground">Status:</span>
+                                <p className="font-medium">{employeeData?.status || 'Active'}</p>
+                            </div>
+                        </div>
+                    </div>
+                </CardContent>
+                <CardFooter className="flex justify-end">
+                    <Button type="button" variant="outline" onClick={onClose}>
+                        Close
+                    </Button>
+                </CardFooter>
+            </Card>
+        );
+    }
+
+    // If Super Admin is editing their own account, show special badge
+    if (isEditingSuperAdmin && isCurrentUserSuperAdmin) {
+        // Continue to show the form with Super Admin badge
+    }
+
     return (
         <Card className="w-full max-w-2xl mx-auto">
             <CardHeader>
-                <CardTitle>
-                    {mode === 'edit' ? 'Edit Employee' : 'Add New Employee'}
-                </CardTitle>
+                <div className="flex items-center justify-between">
+                    <CardTitle>
+                        {mode === 'edit' ? 'Edit Employee' : 'Add New Employee'}
+                    </CardTitle>
+                    {isEditingSuperAdmin && isCurrentUserSuperAdmin && (
+                        <div className="flex items-center gap-1 text-amber-600 bg-amber-50 px-3 py-1 rounded-full text-sm">
+                            <Shield className="h-4 w-4" />
+                            <span>Super Admin</span>
+                        </div>
+                    )}
+                </div>
                 <CardDescription>
                     {mode === 'edit' 
                         ? 'Update the employee details below.' 
@@ -205,7 +362,28 @@ const AddEmployeeForm = ({ mode = 'add', employeeData = null, onClose, onSuccess
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
-                            <Label htmlFor="department">Department *</Label>
+                            <Label htmlFor="role">Role *</Label>
+                            <div className="relative">
+                                <select
+                                    id="role"
+                                    value={formData.role}
+                                    onChange={(e) => handleInputChange('role', e.target.value)}
+                                    required
+                                    className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-10 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 appearance-none cursor-pointer"
+                                >
+                                    <option value="Employee">Employee</option>
+                                    <option value="Admin">Admin</option>
+                                </select>
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                    <svg className="h-4 w-4 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label htmlFor="department">Department {formData.role === 'Employee' ? '*' : ''}</Label>
                             <div className="relative">
                                 <select
                                     id="department"
@@ -219,10 +397,10 @@ const AddEmployeeForm = ({ mode = 'add', employeeData = null, onClose, onSuccess
                                             position: '' // Reset position when department changes
                                         }));
                                     }}
-                                    required
+                                    required={formData.role === 'Employee'}
                                     className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-10 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 appearance-none cursor-pointer"
                                 >
-                                    <option value="" disabled>Select department</option>
+                                    <option value="" disabled>{formData.role === 'Employee' ? 'Select department' : 'N/A for Admin'}</option>
                                     {departments.map(dept => (
                                         <option key={dept} value={dept}>{dept}</option>
                                     ))}
@@ -236,7 +414,7 @@ const AddEmployeeForm = ({ mode = 'add', employeeData = null, onClose, onSuccess
                         </div>
 
                         <div className="space-y-2">
-                            <Label htmlFor="position">Position *</Label>
+                            <Label htmlFor="position">Position {formData.role === 'Employee' ? '*' : ''}</Label>
                             <div className="relative">
                                 <select
                                     id="position"
@@ -249,12 +427,12 @@ const AddEmployeeForm = ({ mode = 'add', employeeData = null, onClose, onSuccess
                                             position: value
                                         }));
                                     }}
-                                    disabled={!formData.department}
-                                    required
+                                    disabled={!formData.department || formData.role === 'Admin'}
+                                    required={formData.role === 'Employee'}
                                     className="flex h-10 w-full rounded-md border border-input bg-background pl-3 pr-10 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 appearance-none cursor-pointer"
                                 >
                                     <option value="" disabled>
-                                        {formData.department ? 'Select position' : 'Select department first'}
+                                        {formData.role === 'Admin' ? 'N/A for Admin' : (formData.department ? 'Select position' : 'Select department first')}
                                     </option>
                                     {getPositionOptions(formData.department).map(position => (
                                         <option key={position} value={position}>{position}</option>
@@ -275,7 +453,7 @@ const AddEmployeeForm = ({ mode = 'add', employeeData = null, onClose, onSuccess
                     </div>
 
                     <div className="space-y-2">
-                        <Label htmlFor="joinDate">Join Date *</Label>
+                        <Label htmlFor="joinDate">Join Date {formData.role === 'Employee' ? '*' : ''}</Label>
                         <div className="relative">
                             <Input
                                 id="joinDate"
@@ -296,7 +474,7 @@ const AddEmployeeForm = ({ mode = 'add', employeeData = null, onClose, onSuccess
                                         try { e.currentTarget.showPicker(); } catch (_) {}
                                     }
                                 }}
-                                required
+                                required={formData.role === 'Employee'}
                                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 
                                 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm 
                                 file:font-medium placeholder:text-muted-foreground focus-visible:outline-none 
@@ -354,12 +532,47 @@ const AddEmployeeForm = ({ mode = 'add', employeeData = null, onClose, onSuccess
                                 </Button>
                             </div>
                         </div>
-                        {/* <p className="text-sm text-muted-foreground">
-                            {mode === 'edit' 
-                                ? 'Leave blank to keep current password. Minimum 8 characters if changing.' 
-                                : 'Minimum 8 characters. Employee can change this after first login.'}
-                        </p> */}
                     </div>
+
+                    {/* Status toggle for admins in edit mode */}
+                    {/* {isEditingAdmin && (
+                        <div className="space-y-2">
+                            <Label htmlFor="status">Account Status</Label>
+                            <div className="flex items-center space-x-4">
+                                <div className="flex items-center space-x-2">
+                                    <input
+                                        type="radio"
+                                        id="statusActive"
+                                        name="status"
+                                        checked={formData.isActive}
+                                        onChange={() => handleInputChange('isActive', true)}
+                                        className="h-4 w-4 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <Label htmlFor="statusActive" className="text-sm font-normal cursor-pointer">
+                                        Active
+                                    </Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <input
+                                        type="radio"
+                                        id="statusTerminated"
+                                        name="status"
+                                        checked={!formData.isActive}
+                                        onChange={() => handleInputChange('isActive', false)}
+                                        className="h-4 w-4 text-red-600 focus:ring-red-500"
+                                    />
+                                    <Label htmlFor="statusTerminated" className="text-sm font-normal cursor-pointer text-red-600">
+                                        Terminated
+                                    </Label>
+                                </div>
+                            </div>
+                            {!formData.isActive && (
+                                <p className="text-sm text-red-500">
+                                    Warning: This admin account will be terminated and the user will no longer be able to log in.
+                                </p>
+                            )}
+                        </div>
+                    )} */}
 
                 </CardContent>
                 

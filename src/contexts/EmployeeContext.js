@@ -98,6 +98,35 @@ const loadEmployees = async () => {
         }
     };
 
+    const addAdmin = async (adminData) => {
+        try {
+            setError(null);
+            console.log('🔄 EmployeeContext: Adding new admin with data:', adminData);
+            
+            // Validate required fields
+            if (!adminData.name) {
+                throw new Error('Name is required');
+            }
+            
+            if (!adminData.email) {
+                throw new Error('Email is required');
+            }
+            
+            if (!adminData.password) {
+                throw new Error('Password is required');
+            }
+            
+            const newAdmin = await employeeApi.createAdmin(adminData);
+            
+            console.log('✅ EmployeeContext: Admin added successfully:', newAdmin);
+            return newAdmin;
+        } catch (err) {
+            console.error('❌ EmployeeContext: Error adding admin:', err);
+            setError(err.message);
+            throw err;
+        }
+    };
+
     const updateEmployee = async (employeeId, updates) => {
         try {
             setError(null);
@@ -118,6 +147,87 @@ const loadEmployees = async () => {
             await employeeApi.deleteEmployee(employeeId);
             setEmployees(prev => prev.filter(emp => emp.employee_id !== employeeId));
         } catch (err) {
+            setError(err.message);
+            throw err;
+        }
+    };
+
+    // Update an existing admin
+    const updateAdmin = async (adminId, updates) => {
+        try {
+            setError(null);
+            console.log('🔄 EmployeeContext: Updating admin:', adminId);
+            
+            // Get current user's role from localStorage or context
+            const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
+            const currentUserRole = currentUser?.role;
+            const currentUserId = currentUser?.id;
+            const isCurrentUserSuperAdmin = currentUser?.is_super_admin === true || currentUserRole === 'super_admin';
+            
+            // Check if admin is editing their own account
+            const isEditingSelf = currentUserId === adminId;
+            
+            console.log('🔍 Permission check:', {
+                currentUserId,
+                adminId,
+                isEditingSelf,
+                currentUserRole,
+                isCurrentUserSuperAdmin,
+                is_super_admin: currentUser?.is_super_admin
+            });
+            
+            // Allow if: Super Admin OR editing own account
+            if (!isCurrentUserSuperAdmin && !isEditingSelf) {
+                console.error('❌ Access denied: Not Super Admin and not editing self');
+                throw new Error("You don't have access to edit these accounts.");
+            }
+            
+            const updatedAdmin = await employeeApi.updateAdmin(adminId, updates, currentUserRole, currentUserId, isCurrentUserSuperAdmin);
+            
+            // Update the admins state
+            setAdmins(prev => 
+                prev.map(admin => admin.id === adminId ? updatedAdmin : admin)
+            );
+            
+            console.log('✅ EmployeeContext: Admin updated successfully:', updatedAdmin);
+            return updatedAdmin;
+        } catch (err) {
+            console.error('❌ EmployeeContext: Error updating admin:', err);
+            setError(err.message);
+            throw err;
+        }
+    };
+
+    // Terminate an admin by setting is_active to false
+    const terminateAdmin = async (adminId) => {
+        try {
+            setError(null);
+            console.log('🔄 EmployeeContext: Terminating admin:', adminId);
+            
+            // Get current user's role from localStorage or context
+            const currentUser = JSON.parse(localStorage.getItem('ems_user') || '{}');
+            const currentUserRole = currentUser?.role;
+            
+            // Check if current user is Super Admin
+            if (currentUserRole !== 'super_admin') {
+                throw new Error("You don't have access to terminate these accounts.");
+            }
+            
+            const updatedAdmin = await employeeApi.terminateAdmin(adminId, currentUserRole);
+            
+            // Update the admins state to reflect the terminated status
+            setAdmins(prev => 
+                prev.map(admin => admin.id === adminId ? { 
+                    ...admin, 
+                    is_active: false,
+                    status: 'Terminated'
+                } : admin)
+            );
+            
+            console.log('✅ EmployeeContext: Admin terminated successfully:', updatedAdmin);
+            return updatedAdmin;
+        } catch (err) {
+            console.error('❌ EmployeeContext: Error terminating admin:', err);
             setError(err.message);
             throw err;
         }
@@ -149,6 +259,62 @@ const loadEmployees = async () => {
         return positionMap[department] || [];
     };
 
+    // Check if a user is Super Admin using boolean field (with backward compatibility)
+    const isSuperAdmin = (user) => {
+        return user?.is_super_admin === true || user?.role === 'super_admin';
+    };
+
+    // Check if user can edit another user
+    const canEditUser = (currentUser, targetUser) => {
+        const isCurrentSuperAdmin = currentUser?.is_super_admin === true || currentUser?.role === 'super_admin';
+        const isTargetSuperAdmin = targetUser?.is_super_admin === true || targetUser?.role === 'super_admin';
+        
+        // Super Admin can edit anyone
+        if (isCurrentSuperAdmin) return true;
+        // Regular admin cannot edit Super Admin
+        if (isTargetSuperAdmin) return false;
+        // Regular admin can edit employees and other admins
+        return true;
+    };
+
+    // Check if user can terminate another user
+    const canTerminateUser = (currentUser, targetUser) => {
+        const isCurrentSuperAdmin = currentUser?.is_super_admin === true || currentUser?.role === 'super_admin';
+        const isTargetSuperAdmin = targetUser?.is_super_admin === true || targetUser?.role === 'super_admin';
+        
+        // Super Admin can terminate anyone except themselves (self-preservation)
+        if (isCurrentSuperAdmin) {
+            return targetUser?.id !== currentUser?.id;
+        }
+        // Regular admin cannot terminate Super Admin
+        if (isTargetSuperAdmin) return false;
+        // Regular admin can terminate employees and other admins
+        return true;
+    };
+
+    // Check if current user can edit admin accounts
+    // Returns true only if current user is Super Admin
+    const canEditAdmin = (currentUser) => {
+        return currentUser?.is_super_admin === true || currentUser?.role === 'super_admin';
+    };
+
+    // Check if current user can edit a specific user
+    // Regular admins can only edit employees, not other admins
+    const canEditSpecificUser = (currentUser, targetUser) => {
+        const isCurrentSuperAdmin = currentUser?.is_super_admin === true || currentUser?.role === 'super_admin';
+        const isTargetSuperAdmin = targetUser?.is_super_admin === true || targetUser?.role === 'super_admin';
+        const isTargetAdmin = targetUser?.role === 'admin' || targetUser?.role === 'super_admin' || targetUser?.isAdmin === true || targetUser?.is_super_admin === true;
+        
+        // Super Admin can edit anyone
+        if (isCurrentSuperAdmin) return true;
+        
+        // Regular admin cannot edit any admin accounts (including Super Admin)
+        if (isTargetAdmin || isTargetSuperAdmin) return false;
+        
+        // Regular admin can edit employees
+        return true;
+    };
+
     return (
         <EmployeeContext.Provider value={{
             employees,
@@ -156,14 +322,23 @@ const loadEmployees = async () => {
             loading,
             error,
             addEmployee,
+            addAdmin,
             updateEmployee,
+            updateAdmin,
             deleteEmployee,
+            terminateAdmin,
             refreshEmployees: loadEmployees,
             // Utility functions
             getEmployeeFullName,
             getEmployeesByDepartment,
             getEmployeesByPosition,
-            getPositionOptions
+            getPositionOptions,
+            // Permission functions
+            isSuperAdmin,
+            canEditUser,
+            canTerminateUser,
+            canEditAdmin,
+            canEditSpecificUser
         }}>
             {children}
         </EmployeeContext.Provider>

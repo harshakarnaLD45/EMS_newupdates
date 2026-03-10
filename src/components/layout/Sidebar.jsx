@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { formatFullName, getInitials } from '../../lib/utils';
 import LDLogo from '../../assets/LD_logo.jpeg';
 
 import { LayoutDashboard, Clock, Calendar, X, LogOut, Users } from 'lucide-react';
@@ -174,11 +175,11 @@ const Sidebar = ({ open, onClose }) => {
             justifyContent: 'center' 
           }}>
             <span style={{ color: '#2563eb', fontWeight: '500' }}>
-              {user?.name ? user.name.split(' ').map(n => n[0]).join('').toUpperCase() : 'U'}
+              {getInitials(user)}
             </span>
           </div>
           <div style={{display: 'flex', flexDirection: 'column',alignContent: 'center' }}>
-            <h3 className=" bodyMediumText4" style={{marginBottom:'0px', fontSize: '14px', fontWeight: '500', color: '#111827'}}>{user?.name || 'User'}</h3>
+            <h3 className=" bodyMediumText4" style={{marginBottom:'0px', fontSize: '14px', fontWeight: '500', color: '#111827'}}>{formatFullName(user)}</h3>
             <p className=" bodyRegularText5" style={{ fontSize: '12px', color: '#6b7280', margin: 0 }}>
               {user?.role === 'admin' ? 'Administrator' : 'Employee'} • {user?.role === 'admin' ? 'Management' : 'Staff'}
             </p>

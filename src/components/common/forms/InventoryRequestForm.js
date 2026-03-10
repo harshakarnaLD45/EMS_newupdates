@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Package, CheckCircle, Plus, Image, FileImage } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
-import { inventoryApi } from '../../../utils/supabase';
+import { inventoryApi, employeeApi } from '../../../utils/supabase';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 
 // Helper component for the Success Modal
@@ -209,13 +209,25 @@ const styles = {
 };
 
 const InventoryRequestForm = ({ onClose, onSuccess }) => {
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
+  const [isUserAdmin, setIsUserAdmin] = useState(false);
+  
+  // Check admin status on mount
+  useEffect(() => {
+    if (isAdmin && typeof isAdmin === 'function') {
+      const adminStatus = isAdmin();
+      console.log('🔍 Admin status check:', adminStatus);
+      setIsUserAdmin(adminStatus);
+    }
+  }, [isAdmin]);
+  
   const [formData, setFormData] = useState({
     itemName: '',
     category: '',
     condition: 'new',
     serialNumber: '',
-    description: ''
+    description: '',
+    employeeId: ''
   });
   const [itemImage, setItemImage] = useState(null);
   const [invoiceImage, setInvoiceImage] = useState(null);
@@ -223,6 +235,8 @@ const InventoryRequestForm = ({ onClose, onSuccess }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState(null);
   const [errors, setErrors] = useState({});
+  const [employees, setEmployees] = useState([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
 
   const categories = [
     { value: 'electronics', label: 'Electronics' },
@@ -237,6 +251,39 @@ const InventoryRequestForm = ({ onClose, onSuccess }) => {
     { value: 'fair', label: 'Fair' },
     { value: 'poor', label: 'Poor' }
   ];
+
+  // Fetch employees for admin dropdown when admin status is confirmed
+  useEffect(() => {
+    console.log('🔍 isUserAdmin changed:', isUserAdmin);
+    if (isUserAdmin) {
+      fetchEmployees();
+    }
+  }, [isUserAdmin]);
+
+  const fetchEmployees = async () => {
+    setLoadingEmployees(true);
+    try {
+      console.log('🔍 Fetching employees for admin dropdown...');
+      const employeeList = await employeeApi.getEmployees();
+      console.log('📋 Raw employee list:', employeeList);
+      console.log('📋 Employee count:', employeeList?.length || 0);
+      
+      // Filter only active employees - check various status field possibilities
+      const activeEmployees = employeeList.filter(emp => {
+        // Check if status field exists and is 'active' or if no status field exists (assume active)
+        const isActive = !emp.status || emp.status === 'active' || emp.status === 'Active';
+        console.log(`Employee ${emp.id} / ${emp.employee_id} - status: ${emp.status}, isActive: ${isActive}`);
+        return isActive;
+      });
+      
+      console.log('✅ Active employees:', activeEmployees.length);
+      setEmployees(activeEmployees);
+    } catch (error) {
+      console.error('❌ Error fetching employees:', error);
+    } finally {
+      setLoadingEmployees(false);
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -269,6 +316,9 @@ const InventoryRequestForm = ({ onClose, onSuccess }) => {
     }
     if (!formData.category) {
       newErrors.category = 'Please select a category';
+    }
+    if (isUserAdmin && !formData.employeeId) {
+      newErrors.employeeId = 'Please select an employee';
     }
     if (!itemImage) {
       newErrors.itemImage = 'Please upload an item image';
@@ -335,13 +385,13 @@ const InventoryRequestForm = ({ onClose, onSuccess }) => {
       
       // Create inventory item object for database
       const inventoryItem = {
-        employee_id: user?.employee_id || user?.id,
+        employee_id: isUserAdmin ? formData.employeeId : (user?.employee_id || user?.id),
         item_name: formData.itemName,
         item_details: formData.description,
         category: formData.category,
         serial_number: formData.serialNumber,
         condition: conditionLabel?.toLowerCase() || 'new',
-        added_by: 'Employee'
+        added_by: isUserAdmin ? 'Admin' : 'Employee'
       };
 
       console.log('📤 Adding inventory item:', inventoryItem);
@@ -403,6 +453,43 @@ const InventoryRequestForm = ({ onClose, onSuccess }) => {
               </span>
             )}
           </div>
+
+          {/* Employee Dropdown - Only for Admin */}
+          {isUserAdmin && (
+            <div style={styles.formGroup}>
+              <label className="bodyMediumText5" style={styles.label}>
+                Assign to Employee <span style={styles.required}>*</span>
+              </label>
+              <Select
+                value={formData.employeeId}
+                onValueChange={(value) => handleSelectChange('employeeId', value)}
+                disabled={isSubmitting || loadingEmployees}
+              >
+                <SelectTrigger
+                  className="bodyMediumText5"
+                  style={{
+                    width: '100%',
+                    height: '40px',
+                    borderColor: errors.employeeId ? '#ef4444' : undefined
+                  }}
+                >
+                  <SelectValue placeholder={loadingEmployees ? 'Loading employees...' : (employees.length === 0 ? 'No employees found' : 'Select employee')} />
+                </SelectTrigger>
+                <SelectContent className="select-content-high-zindex">
+                  {employees.map((emp) => (
+                    <SelectItem key={emp.employee_id || emp.id} value={emp.employee_id || emp.id} className="bodyMediumText5">
+                      {emp.name || `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || emp.email || 'Unknown'} 
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.employeeId && (
+                <span className="bodyRegularText5" style={{ color: '#ef4444', fontSize: '0.75rem', marginTop: '4px' }}>
+                  {errors.employeeId}
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Category and Condition Row */}
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>

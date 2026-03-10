@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { UserPlus, RefreshCw } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { useEmployees } from '../../contexts/EmployeeContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { formatFullName } from '../../lib/utils';
 import { 
     AddEmployeeForm, 
     EmployeeTable, 
@@ -24,7 +26,12 @@ const EmployeeManagement = () => {
     const [selectedEmployeeForAccountDetails, setSelectedEmployeeForAccountDetails] = useState(null);
     
     // ✅ IMPORTANT: Get both employees AND admins from context
-    const { employees, admins, loading, error, addEmployee, updateEmployee, deleteEmployee, refreshEmployees } = useEmployees();
+    const { employees, admins, loading, error, addEmployee, updateEmployee, deleteEmployee, terminateAdmin, refreshEmployees } = useEmployees();
+    const { user } = useAuth();
+    
+    // Check if current user is Super Admin or regular admin (using boolean field with backward compatibility)
+    const isCurrentUserSuperAdmin = user?.is_super_admin === true || user?.role === 'super_admin';
+    const isCurrentUserRegularAdmin = user?.role === 'admin' && !isCurrentUserSuperAdmin;
     
     const roles = ['All Roles', 'Admin', 'Employee'];
     const [selectedRole, setSelectedRole] = useState('All Roles');
@@ -182,18 +189,73 @@ const matchesRole = selectedRole === 'All Roles' ||
                 <EmployeeTable 
                     employees={filteredEmployees}
                     showActions={true}
+                    isCurrentUserSuperAdmin={isCurrentUserSuperAdmin}
                     onViewAccountDetails={(employee) => {
                         setSelectedEmployeeForAccountDetails(employee);
                         setAccountDetailsModalOpen(true);
                     }}
                     onEdit={(employee) => {
+                        // Check if target is an admin account (regular admin or super admin)
+                        const isTargetSuperAdmin = employee.is_super_admin === true || employee.role === 'super_admin';
+                        const isTargetAdmin = employee.role === 'admin' || employee.role === 'super_admin' || employee.isAdmin === true || employee.is_super_admin === true;
+                        
+                        // Check if admin is editing their own account
+                        const isEditingSelf = user?.id === employee.id;
+                        
+                        // Regular admins can edit their own account, but cannot edit other admin accounts
+                        if (isTargetAdmin && isCurrentUserRegularAdmin && !isCurrentUserSuperAdmin && !isEditingSelf) {
+                            setNotification({
+                                type: 'error',
+                                message: "You don't have access to edit these accounts."
+                            });
+                            setTimeout(() => setNotification(null), 3000);
+                            return;
+                        }
+                        
+                        // Super Admin protection - cannot be edited by non-Super Admin
+                        if (isTargetSuperAdmin && !isCurrentUserSuperAdmin) {
+                            setNotification({
+                                type: 'error',
+                                message: 'You do not have permission to edit the Super Admin account.'
+                            });
+                            setTimeout(() => setNotification(null), 3000);
+                            return;
+                        }
                         setSelectedEmployee(employee);
                         setEditDialogOpen(true);
                     }}
                     onDelete={async (employee) => {
                         try {
+                            // Check if target is an admin account
+                            const isTargetSuperAdmin = employee.is_super_admin === true || employee.role === 'super_admin';
+                            const isTargetAdmin = employee.role === 'admin' || employee.role === 'super_admin' || employee.isAdmin === true || employee.is_super_admin === true;
+                            
+                            // Regular admins cannot terminate any admin accounts
+                            if (isTargetAdmin && isCurrentUserRegularAdmin && !isCurrentUserSuperAdmin) {
+                                setNotification({
+                                    type: 'error',
+                                    message: "You don't have access to terminate these accounts."
+                                });
+                                setTimeout(() => setNotification(null), 3000);
+                                return;
+                            }
+                            
+                            // Prevent terminating Super Admin
+                            if (isTargetSuperAdmin) {
+                                setNotification({
+                                    type: 'error',
+                                    message: 'The Super Admin account cannot be terminated.'
+                                });
+                                setTimeout(() => setNotification(null), 3000);
+                                return;
+                            }
+                            
+                            const isAdminUser = employee.role === 'admin' || employee.isAdmin === true;
+                            const userType = isAdminUser ? 'admin' : 'employee';
+                            const employeeName = formatFullName(employee, 'this user');
+                            
                             const confirmed = window.confirm(
-                                `Are you sure you want to terminate ${employee.name}?\n\nThis will mark the employee as "Terminated" but keep their records in the system.`
+                                `Are you sure you want to terminate ${employeeName}?\n\nThis will mark the ${userType} as "Terminated" but keep their records in the system.`
                             );
                             
                             if (!confirmed) return;
@@ -204,14 +266,20 @@ const matchesRole = selectedRole === 'All Roles' ||
                                 throw new Error('Employee ID not found. Cannot update employee status.');
                             }
                             
-                            await updateEmployee(employeeIdToUpdate, { 
-                                status: 'Terminated',
-                                terminated_at: new Date().toISOString()
-                            });
+                            if (isAdminUser) {
+                                // Terminate admin using is_active field
+                                await terminateAdmin(employee.id);
+                            } else {
+                                // Terminate employee using status field
+                                await updateEmployee(employeeIdToUpdate, { 
+                                    status: 'Terminated',
+                                    terminated_at: new Date().toISOString()
+                                });
+                            }
                             
                             setNotification({
                                 type: 'success',
-                                message: `${employee.name} has been marked as Terminated`
+                                message: `${employeeName} has been marked as Terminated`
                             });
                             
                             refreshEmployees();

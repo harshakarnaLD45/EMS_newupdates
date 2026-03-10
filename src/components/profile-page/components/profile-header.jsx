@@ -2,14 +2,10 @@ import { Button } from "../../ui/button";
 import { Card, CardContent } from "../../ui/card";
 import { Badge } from "../../ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "../../ui/avatar";
+import { formatFullName, getInitials } from "../../../lib/utils";
 import { Camera, Calendar, Mail, MapPin, Building2, Briefcase } from "lucide-react";
 
 export default function ProfileHeader({ profile, isEditing, onEditToggle }) {
-  // Get initials from name
-  const getInitials = (name) => {
-    if (!name) return 'U';
-    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-  };
 
   // Format join date
   const formatJoinDate = (date) => {
@@ -29,7 +25,7 @@ export default function ProfileHeader({ profile, isEditing, onEditToggle }) {
             <Avatar className="h-24 w-24">
               <AvatarImage src={profile?.avatar_url} alt={profile?.name || 'Profile'} />
               <AvatarFallback className="text-2xl bg-blue-100 text-blue-600">
-                {getInitials(profile?.name)}
+                {getInitials(profile)}
               </AvatarFallback>
             </Avatar>
             {/* {isEditing && (
@@ -45,7 +41,7 @@ export default function ProfileHeader({ profile, isEditing, onEditToggle }) {
           {/* Profile Info */}
           <div className="flex-1 space-y-2">
             <div className="flex flex-col gap-2 md:flex-row md:items-center">
-              <h1 className="text-2xl font-bold">{profile?.name || 'Employee'}</h1>
+              <h1 className="text-2xl font-bold">{formatFullName(profile, 'Employee')}</h1>
               <Badge 
                 variant="secondary" 
                 className={`w-fit ${

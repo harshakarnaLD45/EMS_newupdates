@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Calendar, AlertTriangle, UserPlus, FileText, RefreshCw, X, Info, DollarSign, Package, CheckCircle, XCircle, Trash2, Clock, Image, Download } from 'lucide-react';
+import { Users, Calendar, AlertTriangle, UserPlus, FileText, RefreshCw, X, Info, DollarSign, Package, CheckCircle, XCircle, Trash2, Clock, Image, Download, Pencil, Plus } from 'lucide-react';
 import { Tooltip } from '@mui/material';
 import { adminApi, leaveApi, timesheetComplianceApi, employeeApi, reimbursementApi, inventoryApi, supabase } from '../../utils/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { AddEmployeeForm } from '../../components';
+import { AddEmployeeForm, ReimbursementRequestForm, InventoryRequestForm } from '../../components';
 import './AdminDashboard.css';
 import * as Dialog from '@radix-ui/react-dialog';
 import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
@@ -44,7 +44,7 @@ const AdminDashboard = () => {
         others: 0
     });
     const [inventoryEmployeeFilter, setInventoryEmployeeFilter] = useState('all');
-    
+
     // Image preview state
     const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
     const [selectedInventoryItem, setSelectedInventoryItem] = useState(null);
@@ -52,6 +52,16 @@ const AdminDashboard = () => {
     // Receipt preview state
     const [receiptPreviewOpen, setReceiptPreviewOpen] = useState(false);
     const [selectedReimbursement, setSelectedReimbursement] = useState(null);
+
+    // Edit reimbursement state
+    const [editReimbursementOpen, setEditReimbursementOpen] = useState(false);
+    const [reimbursementToEdit, setReimbursementToEdit] = useState(null);
+
+    // New reimbursement request state
+    const [newReimbursementOpen, setNewReimbursementOpen] = useState(false);
+
+    // Inventory dialog state
+    const [inventoryDialogOpen, setInventoryDialogOpen] = useState(false);
 
     const loadDashboardData = async () => {
         try {
@@ -368,7 +378,7 @@ const AdminDashboard = () => {
                     try {
                         const employeeId = employee.employee_id || employee.id;
                         const complianceResult = await timesheetComplianceApi.checkMissingTimesheets(employeeId);
-                        
+
                         // Add warnings with employee info
                         if (complianceResult.warnings && complianceResult.warnings.length > 0) {
                             complianceResult.warnings.forEach(warning => {
@@ -458,14 +468,14 @@ const AdminDashboard = () => {
             try {
                 //console.log('🔄 Checking employee statuses after leave periods...');
                 const today = new Date().toISOString().slice(0, 10);
-                
+
                 // Get all employees who might need status updates
-                const employeesToCheck = allStaff.filter(emp => 
+                const employeesToCheck = allStaff.filter(emp =>
                     emp.status && (emp.status.toLowerCase().includes('leave') || emp.status.toLowerCase() === 'on-leave')
                 );
-                
+
                 //console.log('👥 Found employees with leave status to check:', employeesToCheck.length);
-                
+
                 for (const employee of employeesToCheck) {
                     try {
                         await adminApi.updateEmployeeStatusAfterLeave(employee.employee_id || employee.id);
@@ -473,7 +483,7 @@ const AdminDashboard = () => {
                         console.warn('⚠️ Could not update status for employee:', employee.id, statusError.message);
                     }
                 }
-                
+
                 if (employeesToCheck.length > 0) {
                     //console.log('✅ Completed employee status checks');
                 }
@@ -594,7 +604,7 @@ const AdminDashboard = () => {
 
             // Use adminApi.approveLeaveRequest which includes employee status update
             const result = await adminApi.approveLeaveRequest(requestId);
-            
+
             // Update status and show message
             setActionStatus(prev => ({ ...prev, [requestId]: 'approved' }));
             setError('Leave request approved successfully! Employee status updated.');
@@ -618,7 +628,7 @@ const AdminDashboard = () => {
             console.error('Error approving leave request:', error);
             setActionStatus(prev => ({ ...prev, [requestId]: 'error' }));
             setError(`Error approving leave request: ${error.message}`);
-            
+
             setTimeout(() => {
                 setActionStatus(prev => {
                     const newStatus = { ...prev };
@@ -643,7 +653,7 @@ const AdminDashboard = () => {
 
             // Use adminApi.rejectLeaveRequest which includes employee status update
             const result = await adminApi.rejectLeaveRequest(requestId, reason);
-            
+
             // Update status and show message
             setActionStatus(prev => ({ ...prev, [requestId]: 'rejected' }));
             setError('Leave request rejected successfully! Employee status updated.');
@@ -667,7 +677,7 @@ const AdminDashboard = () => {
             console.error('Error rejecting leave request:', error);
             setActionStatus(prev => ({ ...prev, [requestId]: 'error' }));
             setError(`Error rejecting leave request: ${error.message}`);
-            
+
             setTimeout(() => {
                 setActionStatus(prev => {
                     const newStatus = { ...prev };
@@ -687,7 +697,7 @@ const AdminDashboard = () => {
         try {
             const requests = await reimbursementApi.getAllRequests();
             setReimbursementRequests(requests);
-            
+
             // Calculate stats
             const stats = {
                 pending: 0,
@@ -709,7 +719,7 @@ const AdminDashboard = () => {
         try {
             const items = await inventoryApi.getAllItems();
             setInventoryItems(items);
-            
+
             // Calculate stats
             const stats = {
                 total: items.length,
@@ -725,7 +735,7 @@ const AdminDashboard = () => {
 
     const handleApproveReimbursement = async (requestId) => {
         setProcessingReimbursementIds(prev => new Set([...prev, requestId]));
-        
+
         try {
             await reimbursementApi.updateStatus(requestId, 'approved');
             await loadReimbursementData();
@@ -742,7 +752,7 @@ const AdminDashboard = () => {
 
     const handleRejectReimbursement = async (requestId) => {
         setProcessingReimbursementIds(prev => new Set([...prev, requestId]));
-        
+
         try {
             await reimbursementApi.updateStatus(requestId, 'rejected');
             await loadReimbursementData();
@@ -761,7 +771,7 @@ const AdminDashboard = () => {
         if (!window.confirm('Are you sure you want to delete this item?')) {
             return;
         }
-        
+
         try {
             await inventoryApi.deleteItem(itemId);
             await loadInventoryData();
@@ -793,15 +803,15 @@ const AdminDashboard = () => {
         if (type === 'invoice' && item.invoice_image_url) {
             return item.invoice_image_url;
         }
-        
+
         // Otherwise, generate URL from path
         const path = type === 'item' ? item.item_image_path : item.invoice_image_path;
         if (!path) return null;
-        
+
         const { data } = supabase.storage
             .from('EMS_bucket')
             .getPublicUrl(path);
-        
+
         return data?.publicUrl || null;
     };
 
@@ -819,20 +829,107 @@ const AdminDashboard = () => {
         setSelectedReimbursement(null);
     };
 
+    // Handle edit reimbursement click
+    const handleEditReimbursement = (request) => {
+        if (request.status === 'pending') {
+            setReimbursementToEdit(request);
+            setEditReimbursementOpen(true);
+        }
+    };
+
+    // Close edit reimbursement modal
+    const closeEditReimbursement = () => {
+        setEditReimbursementOpen(false);
+        setReimbursementToEdit(null);
+    };
+
+    // Handle successful reimbursement update
+    const handleReimbursementUpdateSuccess = (updatedRequest) => {
+        setReimbursementRequests(prev =>
+            prev.map(req => req.id === updatedRequest.id ? {
+                ...updatedRequest,
+                amount: parseFloat(updatedRequest.amount)
+            } : req)
+        );
+        closeEditReimbursement();
+    };
+
+    // Handle successful new reimbursement creation
+    const handleReimbursementSuccess = (newRequest) => {
+        setReimbursementRequests(prev => [{
+            ...newRequest,
+            amount: parseFloat(newRequest.amount),
+            employees: { name: user?.name || 'Admin' }
+        }, ...prev]);
+
+        // Update stats
+        setReimbursementStats(prev => ({
+            ...prev,
+            pending: prev.pending + 1
+        }));
+
+        setNewReimbursementOpen(false);
+    };
+
+    // Handle successful inventory request creation
+    const handleInventorySuccess = (newItem) => {
+        // The newItem from API already includes the correct employees join data
+        // No need to override it with admin's name
+        setInventoryItems(prev => [newItem, ...prev]);
+
+        // Update stats
+        setInventoryStats(prev => ({
+            ...prev,
+            total: prev.total + 1
+        }));
+
+        setInventoryDialogOpen(false);
+    };
+
+    // Handle delete reimbursement request
+    const handleDeleteReimbursement = async (requestId) => {
+        if (!window.confirm('Are you sure you want to delete this reimbursement request? This action cannot be undone.')) {
+            return;
+        }
+
+        try {
+            setProcessingReimbursementIds(prev => new Set(prev).add(requestId));
+            await reimbursementApi.deleteRequest(requestId);
+
+            // Remove from local state
+            setReimbursementRequests(prev => prev.filter(req => req.id !== requestId));
+
+            // Update stats
+            setReimbursementStats(prev => ({
+                ...prev,
+                pending: prev.pending - 1
+            }));
+        } catch (error) {
+            console.error('Error deleting reimbursement request:', error);
+            alert('Failed to delete reimbursement request. Please try again.');
+        } finally {
+            setProcessingReimbursementIds(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(requestId);
+                return newSet;
+            });
+        }
+    };
+
     // Helper function to get receipt image URL from Supabase storage
     const getReceiptImageUrl = (request) => {
         // If we have a direct URL, use it
         if (request.receipt_url) {
             return request.receipt_url;
         }
-        
+
         // Otherwise, generate URL from path
         if (!request.receipt_path) return null;
-        
+
         const { data } = supabase.storage
             .from('EMS_bucket')
             .getPublicUrl(request.receipt_path);
-        
+
         return data?.publicUrl || null;
     };
 
@@ -975,6 +1072,26 @@ const AdminDashboard = () => {
                     <h2 className="bodyMediumText2 section-title">Reimbursements</h2>
                     <p className="bodyRegularText4 section-subtitle">Manage employee reimbursement requests</p>
                 </div>
+                <div className="btn_log_leave_section">
+
+                    <Dialog.Root open={newReimbursementOpen} onOpenChange={setNewReimbursementOpen}>
+                        <Dialog.Trigger asChild>
+                            <button className="quick-action-btn primary bodyMediumText3">
+                                <Plus className="w-4 h-4" />
+                                New Request
+                            </button>
+                        </Dialog.Trigger>
+                        <Dialog.Portal>
+                            <Dialog.Overlay className="dialog-overlay" />
+                            <Dialog.Content className="dialog-content">
+                                <ReimbursementRequestForm
+                                    onClose={() => setNewReimbursementOpen(false)}
+                                    onSuccess={handleReimbursementSuccess}
+                                />
+                            </Dialog.Content>
+                        </Dialog.Portal>
+                    </Dialog.Root>
+                </div>
             </div>
 
             {/* Stats Row - Same 3-column grid as employee dashboard */}
@@ -1055,12 +1172,12 @@ const AdminDashboard = () => {
                                         <td className="bodyRegularText4">{formatCurrency(request.amount)}</td>
                                         <td className="bodyRegularText4">{formatDate(request.date)}</td>
                                         <td>
-                                            <div 
+                                            <div
                                                 onClick={() => handleReceiptPreview(request)}
-                                                style={{ 
-                                                    width: '40px', 
-                                                    height: '40px', 
-                                                    borderRadius: '8px', 
+                                                style={{
+                                                    width: '40px',
+                                                    height: '40px',
+                                                    borderRadius: '8px',
                                                     backgroundColor: '#f3f4f6',
                                                     display: 'flex',
                                                     alignItems: 'center',
@@ -1068,11 +1185,11 @@ const AdminDashboard = () => {
                                                     cursor: (request.receipt_name || request.receipt_url || request.receipt_path) ? 'pointer' : 'default',
                                                     border: (request.receipt_name || request.receipt_url || request.receipt_path) ? '2px solid #3b82f6' : '2px dashed #d1d5db',
                                                     transition: 'all 150ms ease'
-                                                }} 
+                                                }}
                                                 title={request.receipt_name ? `Receipt: ${request.receipt_name}` : 'No receipt uploaded'}
                                             >
-                                                <FileText size={24} style={{ 
-                                                    color: (request.receipt_name || request.receipt_url || request.receipt_path) ? '#3b82f6' : '#9ca3af' 
+                                                <FileText size={24} style={{
+                                                    color: (request.receipt_name || request.receipt_url || request.receipt_path) ? '#3b82f6' : '#9ca3af'
                                                 }} />
                                             </div>
                                         </td>
@@ -1086,11 +1203,12 @@ const AdminDashboard = () => {
                                         </td>
                                         <td>
                                             {request.status === 'pending' ? (
-                                                <div className="action-buttons">
+                                                <div className="action-buttons" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                                                     <button
                                                         className="action-btn approve"
                                                         onClick={() => handleApproveReimbursement(request.id)}
                                                         disabled={processingReimbursementIds.has(request.id)}
+                                                        title="Approve request"
                                                     >
                                                         {processingReimbursementIds.has(request.id) ? (
                                                             <RefreshCw size={14} className="animate-spin" />
@@ -1103,8 +1221,61 @@ const AdminDashboard = () => {
                                                         className="action-btn reject"
                                                         onClick={() => handleRejectReimbursement(request.id)}
                                                         disabled={processingReimbursementIds.has(request.id)}
+                                                        title="Reject request"
                                                     >
                                                         Reject
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleEditReimbursement(request)}
+                                                        disabled={processingReimbursementIds.has(request.id)}
+                                                        title="Edit request"
+                                                        style={{
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            width: '32px',
+                                                            height: '32px',
+                                                            borderRadius: '6px',
+                                                            border: 'none',
+                                                            backgroundColor: '#f3f4f6',
+                                                            cursor: processingReimbursementIds.has(request.id) ? 'not-allowed' : 'pointer',
+                                                            transition: 'all 150ms ease',
+                                                            opacity: processingReimbursementIds.has(request.id) ? 0.6 : 1
+                                                        }}
+                                                        onMouseEnter={(e) => {
+                                                            if (!processingReimbursementIds.has(request.id)) {
+                                                                e.currentTarget.style.backgroundColor = '#e5e7eb';
+                                                            }
+                                                        }}
+                                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+                                                    >
+                                                        <Pencil size={16} style={{ color: '#3b82f6' }} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteReimbursement(request.id)}
+                                                        disabled={processingReimbursementIds.has(request.id)}
+                                                        title="Delete request"
+                                                        style={{
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            width: '32px',
+                                                            height: '32px',
+                                                            borderRadius: '6px',
+                                                            border: 'none',
+                                                            backgroundColor: '#fef2f2',
+                                                            cursor: processingReimbursementIds.has(request.id) ? 'not-allowed' : 'pointer',
+                                                            transition: 'all 150ms ease',
+                                                            opacity: processingReimbursementIds.has(request.id) ? 0.6 : 1
+                                                        }}
+                                                        onMouseEnter={(e) => {
+                                                            if (!processingReimbursementIds.has(request.id)) {
+                                                                e.currentTarget.style.backgroundColor = '#fecaca';
+                                                            }
+                                                        }}
+                                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'}
+                                                    >
+                                                        <Trash2 size={16} style={{ color: '#ef4444' }} />
                                                     </button>
                                                 </div>
                                             ) : (
@@ -1128,149 +1299,167 @@ const AdminDashboard = () => {
 
     const renderInventoryTab = () => {
         // Filter inventory items based on selected employee
-        const filteredInventoryItems = inventoryEmployeeFilter === 'all' 
-            ? inventoryItems 
+        const filteredInventoryItems = inventoryEmployeeFilter === 'all'
+            ? inventoryItems
             : inventoryItems.filter(item => item.employees?.name === inventoryEmployeeFilter);
 
         // Get unique employee names for the filter dropdown
         const employeeNames = Array.from(new Set(inventoryItems.map(item => item.employees?.name).filter(Boolean))).sort();
 
         return (
-        <div className="section-container">
-            {/* Header */}
-            <div className="section-header">
-                <div>
-                    <h2 className="bodyMediumText2 section-title">Inventory</h2>
-                    <p className="bodyRegularText4 section-subtitle">Manage company assets assigned to employees</p>
+            <div className="section-container">
+                {/* Header */}
+                <div className="section-header">
+                    <div>
+                        <h2 className="bodyMediumText2 section-title">Inventory</h2>
+                        <p className="bodyRegularText4 section-subtitle">Manage company assets assigned to employees</p>
+                    </div>
+                    <div className="btn_log_leave_section">
+
+                        <Dialog.Root open={inventoryDialogOpen} onOpenChange={setInventoryDialogOpen}>
+                            <Dialog.Trigger asChild>
+                                <button className="quick-action-btn primary bodyMediumText3">
+                                    <Plus className="w-4 h-4" />
+                                    Add Item
+                                </button>
+                            </Dialog.Trigger>
+                            <Dialog.Portal>
+                                <Dialog.Overlay className="dialog-overlay" />
+                                <Dialog.Content className="dialog-content">
+                                    <InventoryRequestForm
+                                        onClose={() => setInventoryDialogOpen(false)}
+                                        onSuccess={handleInventorySuccess}
+                                    />
+                                </Dialog.Content>
+                            </Dialog.Portal>
+                        </Dialog.Root>
+                    </div>
                 </div>
-            </div>
 
 
-            {/* Inventory Table - Same styling as employee dashboard */}
-            <div className="stats-card w-full">
-                <div className="section-table-container">
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent:'space-between', gap: '0.75rem', width: '100%' }}>
-                    
-                    <h3 className="bodyRegularText3" style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600' }}>
-                        <Package size={20} style={{ color: '#3b82f6' }} />
-                        {inventoryEmployeeFilter === 'all' ? 'All Inventory Items' : `Items for ${inventoryEmployeeFilter}`}
-                    </h3>
+                {/* Inventory Table - Same styling as employee dashboard */}
+                <div className="stats-card w-full">
+                    <div className="section-table-container">
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', width: '100%' }}>
+                            <h3 className="bodyRegularText3" style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: '600' }}>
+                                <Package size={20} style={{ color: '#3b82f6' }} />
+                                {inventoryEmployeeFilter === 'all' ? 'All Inventory Items' : `Items for ${inventoryEmployeeFilter}`}
+                            </h3>
+                            <div>
 
-                    <div >
-
-                <Select 
-                    value={inventoryEmployeeFilter}
-                    onValueChange={(value) => setInventoryEmployeeFilter(value)}
-                >
-                    <SelectTrigger 
-                        className="bodyMediumText4"
-                        style={{ minWidth: '200px' }}
-                    >
-                        <SelectValue placeholder="All Employees" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="all">All Employees</SelectItem>
-                        {employeeNames.map(employeeName => (
-                            <SelectItem key={employeeName} value={employeeName}>
-                                {employeeName}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-                    </div>
-                    </div>
-                    <div className="inventory-table-wrapper">
-                        <table className="inventory-table">
-                            <thead>
-                                <tr>
-                                    <th className="bodyMediumText3" style={{ color: '#6b7280', fontWeight: '500' }}>Employee</th>
-                                    <th className="bodyMediumText3" style={{ color: '#6b7280', fontWeight: '500' }}>Item</th>
-                                    <th className="bodyMediumText3" style={{ color: '#6b7280', fontWeight: '500' }}>Category</th>
-                                    <th className="bodyMediumText3" style={{ color: '#6b7280', fontWeight: '500' }}>Serial No.</th>
-                                    <th className="bodyMediumText3" style={{ color: '#6b7280', fontWeight: '500' }}>Images</th>
-                                    <th className="bodyMediumText3" style={{ color: '#6b7280', fontWeight: '500' }}>Assigned</th>
-                                    <th className="bodyMediumText3" style={{ color: '#6b7280', fontWeight: '500' }}>Added By</th>
-                                    <th className="bodyMediumText3" style={{ color: '#6b7280', fontWeight: '500' }}>Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {filteredInventoryItems.map(item => (
-                                    <tr key={item.id}>
-                                        <td className="bodyRegularText4" style={{ color: '#374151' }}>{item.employees?.name || 'Unknown'}</td>
-                                        <td>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                                <div style={{ minWidth: 0, flex: 1 }}>
-                                                    <div className="bodyRegularText4" style={{ fontWeight: '600', color: '#111827' }}>{item.item_name}</div>
-                                                    {item.item_details && (
-                                                        <div className="bodyRegularText5" style={{ color: '#6b7280', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '250px' }} title={item.item_details}>
-                                                            {item.item_details}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <span className="inventory-category-badge">{item.category}</span>
-                                        </td>
-                                        <td className="bodyRegularText4" style={{ color: '#374151' }}>{item.serial_number || '—'}</td>
-                                        <td>
-                                            <div 
-                                                onClick={() => handleInventoryImagePreview(item)}
-                                                style={{ 
-                                                    width: '40px', 
-                                                    height: '40px', 
-                                                    borderRadius: '8px', 
-                                                    backgroundColor: '#f3f4f6',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    cursor: (item.item_image_url || item.invoice_image_url || item.item_image_path || item.invoice_image_path) ? 'pointer' : 'default',
-                                                    border: (item.item_image_url || item.invoice_image_url || item.item_image_path || item.invoice_image_path) ? '2px solid #3b82f6' : '2px dashed #d1d5db',
-                                                    transition: 'all 150ms ease'
-                                                }}
-                                                title={(item.item_image_url || item.invoice_image_url || item.item_image_path || item.invoice_image_path) 
-                                                    ? `Click to view images` 
-                                                    : 'No images uploaded'}
-                                            >
-                                                <Image size={20} style={{ 
-                                                    color: (item.item_image_url || item.invoice_image_url || item.item_image_path || item.invoice_image_path) ? '#3b82f6' : '#9ca3af' 
-                                                }} />
-                                            </div>
-                                        </td>
-                                        <td className="bodyRegularText4" style={{ color: '#374151' }}>{formatDate(item.assigned_date)}</td>
-                                        <td >
-                                            <span style={{backgroundColor:'grey'}} className="inventory-category-badge">{item.added_by}</span>
-                                        </td>
-                                        <td>
-                                            <button
-                                                className="action-btn delete"
-                                                onClick={() => handleDeleteInventoryItem(item.id)}
-                                                title="Delete item"
-                                            >
-                                                <Trash2 size={16} />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                        {filteredInventoryItems.length === 0 && (
-                            <div className="empty-state bodyRegularText4" style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
-                                {inventoryEmployeeFilter === 'all' 
-                                    ? 'No inventory items found' 
-                                    : `No inventory items found for ${inventoryEmployeeFilter}`}
+                                <Select
+                                    value={inventoryEmployeeFilter}
+                                    onValueChange={(value) => setInventoryEmployeeFilter(value)}
+                                >
+                                    <SelectTrigger
+                                        className="bodyMediumText4"
+                                        style={{ minWidth: '200px' }}
+                                    >
+                                        <SelectValue placeholder="All Employees" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">All Employees</SelectItem>
+                                        {employeeNames.map(employeeName => (
+                                            <SelectItem key={employeeName} value={employeeName}>
+                                                {employeeName}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                             </div>
-                        )}
+                        </div>
+                        <div className="inventory-table-wrapper">
+                            <table className="inventory-table">
+                                <thead>
+                                    <tr>
+                                        <th className="bodyMediumText3" style={{ color: '#6b7280', fontWeight: '500' }}>Employee</th>
+                                        <th className="bodyMediumText3" style={{ color: '#6b7280', fontWeight: '500' }}>Item</th>
+                                        <th className="bodyMediumText3" style={{ color: '#6b7280', fontWeight: '500' }}>Category</th>
+                                        <th className="bodyMediumText3" style={{ color: '#6b7280', fontWeight: '500' }}>Serial No.</th>
+                                        <th className="bodyMediumText3" style={{ color: '#6b7280', fontWeight: '500' }}>Invoice</th>
+                                        <th className="bodyMediumText3" style={{ color: '#6b7280', fontWeight: '500' }}>Assigned</th>
+                                        <th className="bodyMediumText3" style={{ color: '#6b7280', fontWeight: '500' }}>Added By</th>
+                                        <th className="bodyMediumText3" style={{ color: '#6b7280', fontWeight: '500' }}>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {filteredInventoryItems.map(item => (
+                                        <tr key={item.id}>
+                                            <td className="bodyRegularText4" style={{ color: '#374151' }}>{item.employees?.name || 'Unknown'}</td>
+                                            <td>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                    <div style={{ minWidth: 0, flex: 1 }}>
+                                                        <div className="bodyRegularText4" style={{ fontWeight: '600', color: '#111827' }}>{item.item_name}</div>
+                                                        {item.item_details && (
+                                                            <div className="bodyRegularText5" style={{ color: '#6b7280', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '250px' }} title={item.item_details}>
+                                                                {item.item_details}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span className="inventory-category-badge">{item.category}</span>
+                                            </td>
+                                            <td className="bodyRegularText4" style={{ color: '#374151' }}>{item.serial_number || '—'}</td>
+                                            <td>
+                                                <div
+                                                    onClick={() => handleInventoryImagePreview(item)}
+                                                    style={{
+                                                        width: '40px',
+                                                        height: '40px',
+                                                        borderRadius: '8px',
+                                                        backgroundColor: '#f3f4f6',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        cursor: (item.item_image_url || item.invoice_image_url || item.item_image_path || item.invoice_image_path) ? 'pointer' : 'default',
+                                                        border: (item.item_image_url || item.invoice_image_url || item.item_image_path || item.invoice_image_path) ? '2px solid #3b82f6' : '2px dashed #d1d5db',
+                                                        transition: 'all 150ms ease'
+                                                    }}
+                                                    title={(item.item_image_url || item.invoice_image_url || item.item_image_path || item.invoice_image_path)
+                                                        ? `Click to view images`
+                                                        : 'No images uploaded'}
+                                                >
+                                                    <Image size={20} style={{
+                                                        color: (item.item_image_url || item.invoice_image_url || item.item_image_path || item.invoice_image_path) ? '#3b82f6' : '#9ca3af'
+                                                    }} />
+                                                </div>
+                                            </td>
+                                            <td className="bodyRegularText4" style={{ color: '#374151' }}>{formatDate(item.assigned_date)}</td>
+                                            <td >
+                                                <span style={{ backgroundColor: 'grey' }} className="inventory-category-badge">{item.added_by}</span>
+                                            </td>
+                                            <td>
+                                                <button
+                                                    className="action-btn delete"
+                                                    onClick={() => handleDeleteInventoryItem(item.id)}
+                                                    title="Delete item"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                            {filteredInventoryItems.length === 0 && (
+                                <div className="empty-state bodyRegularText4" style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+                                    {inventoryEmployeeFilter === 'all'
+                                        ? 'No inventory items found'
+                                        : `No inventory items found for ${inventoryEmployeeFilter}`}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    );
+        );
     };
 
     return (
         <div className="admin-dashboard">
-         
+
             {/* Tab Navigation - Same pattern as employee dashboard */}
             <div className="dashboard-tabs-container" style={{ marginBottom: '1.5rem' }}>
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -1287,534 +1476,530 @@ const AdminDashboard = () => {
                 <>
 
 
-                   {/* Header */}
-            <div className="admin-header">
-                <div>
-                    <h1 className="admin-title bodyMediumText2">Admin Dashboard</h1>
-                    <p className="admin-subtitle bodyRegularText4">
-                        Welcome back, {user?.name || 'Admin'}! Manage your team and monitor performance
-                    </p>
-                </div>
-                <div className="admin-actions">
-                    <button
-                        className="admin-button secondary"
-                        onClick={loadDashboardData}
-                        disabled={loading}
-                        title="Refresh Data"
-                    >
-                        <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-                    </button>
-                    <button className="admin-button primary bodyRegularText4" onClick={() => setEmployeeDialogOpen(true)}>
-                        <UserPlus size={20} />
-                        Add Employee
-                    </button>
-                </div>
-            </div>
+                    {/* Header */}
+                    <div className="admin-header">
+                        <div>
+                            <h1 className="admin-title bodyMediumText2">Admin Dashboard</h1>
+                            <p className="admin-subtitle bodyRegularText4">
+                                Welcome back, {user?.name || 'Admin'}! Manage your team and monitor performance
+                            </p>
+                        </div>
+                        <div className="admin-actions">
+                            <button
+                                className="admin-button secondary"
+                                onClick={loadDashboardData}
+                                disabled={loading}
+                                title="Refresh Data"
+                            >
+                                <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                            </button>
+                            <button className="admin-button primary bodyRegularText4" onClick={() => setEmployeeDialogOpen(true)}>
+                                <UserPlus size={20} />
+                                Add Employee
+                            </button>
+                        </div>
+                    </div>
 
                     {/* Stats Grid */}
-            <div className="admin-stats-grid">
-                <div className="admin-stat-card">
-                    <div className="stat-icon employee">
-                        <Users size={15} />
-                    </div>
-                    <div className="stat-info">
-                        <h3 className='bodyMediumText3 '>Total Employees</h3>
-                        <div className="stat-number bodyMediumText1">{dashboardStats.totalEmployees.count}</div>
-                        <div className="stat-change bodyRegularText5" style={{ fontSize: '0.75rem' }}>{dashboardStats.totalEmployees.change}</div>
-                    </div>
-                </div>
-
-                <div className="admin-stat-card">
-                    <div className="stat-icon active">
-                        <Users size={15} />
-                    </div>
-                    <div className="stat-info">
-                        <h3 className='bodyMediumText3 '>Active Today</h3>
-                        <div className="stat-number bodyMediumText1">{dashboardStats.activeToday.count}</div>
-                        <div className="stat-change bodyRegularText5">{dashboardStats.activeToday.rate}</div>
-                    </div>
-                </div>
-
-                <div className="admin-stat-card">
-                    <div className="stat-icon leave">
-                        <Calendar size={15} />
-                    </div>
-                    <div className="stat-info">
-                        <h3 className='bodyMediumText3 '>Leave</h3>
-                        <div className="stat-number bodyMediumText1">{dashboardStats.onLeave.count}</div>
-                        <div className="stat-change bodyRegularText5">{dashboardStats.onLeave.details}</div>
-                    </div>
-                </div>
-
-                <div className="admin-stat-card">
-                    <div className="stat-icon pending">
-                        <AlertTriangle size={15} />
-                    </div>
-                    <div className="stat-info">
-                        <h3 className='bodyMediumText3 '>Pending Approvals</h3>
-                        <div className="stat-number bodyMediumText1">{dashboardStats.pendingApprovals.count}</div>
-                        <div className="stat-change bodyRegularText5">{dashboardStats.pendingApprovals.details}</div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Pending Leave Requests */}
-            <div className="admin-section">
-                <h2 className="section-title bodyRegularText3">Pending Leave Requests</h2>
-                <div className="leave-requests">
-                    {loading ? (
-                        <div className="loading-state bodyRegularText4" style={{
-                            textAlign: 'center',
-                            padding: '2rem',
-                            color: '#6b7280'
-                        }}>
-                            Loading requests...
+                    <div className="admin-stats-grid">
+                        <div className="admin-stat-card">
+                            <div className="stat-icon employee">
+                                <Users size={15} />
+                            </div>
+                            <div className="stat-info">
+                                <h3 className='bodyMediumText3 '>Total Employees</h3>
+                                <div className="stat-number bodyMediumText1">{dashboardStats.totalEmployees.count}</div>
+                                <div className="stat-change bodyRegularText5" style={{ fontSize: '0.75rem' }}>{dashboardStats.totalEmployees.change}</div>
+                            </div>
                         </div>
-                    ) : pendingRequests.length === 0 ? (
-                        <div className="empty-state bodyRegularText4" style={{
-                            textAlign: 'center',
-                            padding: '2rem',
-                            color: '#6b7280'
-                        }}>
-                            No pending requests at the moment
+
+                        <div className="admin-stat-card">
+                            <div className="stat-icon active">
+                                <Users size={15} />
+                            </div>
+                            <div className="stat-info">
+                                <h3 className='bodyMediumText3 '>Active Today</h3>
+                                <div className="stat-number bodyMediumText1">{dashboardStats.activeToday.count}</div>
+                                <div className="stat-change bodyRegularText5">{dashboardStats.activeToday.rate}</div>
+                            </div>
                         </div>
-                    ) : (
-                        pendingRequests.map(request => (
-                            <div key={request.id} className="leave-request-card">
-                                <div className="request-info">
-                                    <div className="employee-name bodyMediumText3">
-                                        {request.employees?.name || request.name || `Employee ${request.user_id?.slice(-4) || 'Unknown'}`}
-                                    </div>
-                                    <div className="leave-details " style={{ alignItems: 'center', gap: '0.5rem' }}>
-                                        <span className="leave-type ">{request.type}</span>
-                                        <span className="leave-date bodyRegularText5 ">{request.date} ({request.duration})</span>
-                                    </div>
-                                    {request.rawData?.reason && (
-                                        <div className="leave-reason bodyRegularText4" style={{
-                                            fontSize: '0.875rem',
-                                            color: '#6b7280',
-                                            marginTop: '0.25rem'
-                                        }}>
-                                            Reason: {request.rawData.reason}
-                                        </div>
-                                    )}
-                                    {request.rawData?.has_documentation && (
-                                        <div style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '0.5rem',
-                                            marginTop: '0.5rem',
-                                            padding: '0.5rem',
-                                            backgroundColor: '#f0f9ff',
-                                            borderRadius: '0.375rem',
-                                            border: '1px solid #bfdbfe'
-                                        }}>
-                                            <FileText size={16} style={{ color: '#3b82f6' }} />
-                                            <div style={{ fontSize: '0.875rem', color: '#1e40af' }}>
-                                                <strong>Document attached:</strong> {request.rawData.document_name || 'Supporting document'}
+
+                        <div className="admin-stat-card">
+                            <div className="stat-icon leave">
+                                <Calendar size={15} />
+                            </div>
+                            <div className="stat-info">
+                                <h3 className='bodyMediumText3 '>Leave</h3>
+                                <div className="stat-number bodyMediumText1">{dashboardStats.onLeave.count}</div>
+                                <div className="stat-change bodyRegularText5">{dashboardStats.onLeave.details}</div>
+                            </div>
+                        </div>
+
+                        <div className="admin-stat-card">
+                            <div className="stat-icon pending">
+                                <AlertTriangle size={15} />
+                            </div>
+                            <div className="stat-info">
+                                <h3 className='bodyMediumText3 '>Pending Approvals</h3>
+                                <div className="stat-number bodyMediumText1">{dashboardStats.pendingApprovals.count}</div>
+                                <div className="stat-change bodyRegularText5">{dashboardStats.pendingApprovals.details}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Pending Leave Requests */}
+                    <div className="admin-section">
+                        <h2 className="section-title bodyRegularText3">Pending Leave Requests</h2>
+                        <div className="leave-requests">
+                            {loading ? (
+                                <div className="loading-state bodyRegularText4" style={{
+                                    textAlign: 'center',
+                                    padding: '2rem',
+                                    color: '#6b7280'
+                                }}>
+                                    Loading requests...
+                                </div>
+                            ) : pendingRequests.length === 0 ? (
+                                <div className="empty-state bodyRegularText4" style={{
+                                    textAlign: 'center',
+                                    padding: '2rem',
+                                    color: '#6b7280'
+                                }}>
+                                    No pending requests at the moment
+                                </div>
+                            ) : (
+                                pendingRequests.map(request => (
+                                    <div key={request.id} className="leave-request-card">
+                                        <div className="request-info">
+                                            <div className="employee-name bodyMediumText3">
+                                                {request.employees?.name || request.name || `Employee ${request.user_id?.slice(-4) || 'Unknown'}`}
                                             </div>
-                                            {request.rawData.document_url && (
-                                                <button
-                                                    onClick={() => window.open(request.rawData.document_url, '_blank')}
-                                                    style={{
-                                                        padding: '0.25rem 0.5rem',
-                                                        fontSize: '0.75rem',
-                                                        backgroundColor: '#3b82f6',
-                                                        color: 'white',
-                                                        border: 'none',
-                                                        borderRadius: '0.25rem',
-                                                        cursor: 'pointer'
-                                                    }}
-                                                >
-                                                    View Document
-                                                </button>
+                                            <div className="leave-details " style={{ alignItems: 'center', gap: '0.5rem' }}>
+                                                <span className="leave-type ">{request.type}</span>
+                                                <span className="leave-date bodyRegularText5 ">{request.date} ({request.duration})</span>
+                                            </div>
+                                            {request.rawData?.reason && (
+                                                <div className="leave-reason bodyRegularText4" style={{
+                                                    fontSize: '0.875rem',
+                                                    color: '#6b7280',
+                                                    marginTop: '0.25rem'
+                                                }}>
+                                                    Reason: {request.rawData.reason}
+                                                </div>
+                                            )}
+                                            {request.rawData?.has_documentation && (
+                                                <div style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.5rem',
+                                                    marginTop: '0.5rem',
+                                                    padding: '0.5rem',
+                                                    backgroundColor: '#f0f9ff',
+                                                    borderRadius: '0.375rem',
+                                                    border: '1px solid #bfdbfe'
+                                                }}>
+                                                    <FileText size={16} style={{ color: '#3b82f6' }} />
+                                                    <div style={{ fontSize: '0.875rem', color: '#1e40af' }}>
+                                                        <strong>Document attached:</strong> {request.rawData.document_name || 'Supporting document'}
+                                                    </div>
+                                                    {request.rawData.document_url && (
+                                                        <button
+                                                            onClick={() => window.open(request.rawData.document_url, '_blank')}
+                                                            style={{
+                                                                padding: '0.25rem 0.5rem',
+                                                                fontSize: '0.75rem',
+                                                                backgroundColor: '#3b82f6',
+                                                                color: 'white',
+                                                                border: 'none',
+                                                                borderRadius: '0.25rem',
+                                                                cursor: 'pointer'
+                                                            }}
+                                                        >
+                                                            View Document
+                                                        </button>
+                                                    )}
+                                                </div>
                                             )}
                                         </div>
-                                    )}
-                                </div>
-                                  <div className="request-actions">
-                                    <button
-                                        className={`approve-btn bodyMediumText5 ${
-                                            actionStatus[request.id] === 'approved' ? 'success' : 
-                                            actionStatus[request.id] === 'approving' ? 'processing' : ''
-                                        }`}
-                                        onClick={() => handleApproveRequest(request.id)}
-                                        disabled={loading || actionLoading === request.id || 
-                                                 ['approved', 'rejected'].includes(actionStatus[request.id])}
-                                    >
-                                        {actionStatus[request.id] === 'approving' ? 'Approving...' : 
-                                         actionStatus[request.id] === 'approved' ? 'Approved ✓' : 'Approve'}
-                                    </button>
-                                    <button
-                                        className={`reject-btn bodyMediumText5 ${
-                                            actionStatus[request.id] === 'rejected' ? 'success' : 
-                                            actionStatus[request.id] === 'rejecting' ? 'processing' : ''
-                                        }`}
-                                        onClick={() => handleRejectRequest(request.id, 'Rejected by admin')}
-                                        disabled={loading || actionLoading === request.id || 
-                                                 ['approved', 'rejected'].includes(actionStatus[request.id])}
-                                    >
-                                        {actionStatus[request.id] === 'rejecting' ? 'Rejecting...' : 
-                                         actionStatus[request.id] === 'rejected' ? 'Rejected ✗' : 'Reject'}
-                                    </button>
-                                </div>
-                            </div>
-                        ))
-                    )}
-                </div>
-            </div>
-
-           
-
-            {/* Pending Timesheets */}
-            <div className="admin-section">
-                <h2 className="section-title bodyRegularText3">Pending Timesheets</h2>
-                <div className="leave-requests">
-                    {loading ? (
-                        <div className="loading-state bodyRegularText4" style={{
-                            textAlign: 'center',
-                            padding: '2rem',
-                            color: '#6b7280'
-                        }}>
-                            Loading timesheets...
-                        </div>
-                    ) : pendingTimesheets.length === 0 ? (
-                        <div className="empty-state bodyRegularText4" style={{
-                            textAlign: 'center',
-                            padding: '2rem',
-                            color: '#6b7280'
-                        }}>
-                            No pending timesheets at the moment
-                        </div>
-                    ) : (
-                        pendingTimesheets.map(timesheet => (
-                            <div key={timesheet.id} className="leave-request-card">
-                                <div className="request-info">
-                                    <div className="employee-name bodyMediumText3">
-                                        {timesheet.employee_name || `Employee ${timesheet.employee_id || 'Unknown'}`}
+                                        <div className="request-actions">
+                                            <button
+                                                className={`approve-btn bodyMediumText5 ${actionStatus[request.id] === 'approved' ? 'success' :
+                                                        actionStatus[request.id] === 'approving' ? 'processing' : ''
+                                                    }`}
+                                                onClick={() => handleApproveRequest(request.id)}
+                                                disabled={loading || actionLoading === request.id ||
+                                                    ['approved', 'rejected'].includes(actionStatus[request.id])}
+                                            >
+                                                {actionStatus[request.id] === 'approving' ? 'Approving...' :
+                                                    actionStatus[request.id] === 'approved' ? 'Approved ✓' : 'Approve'}
+                                            </button>
+                                            <button
+                                                className={`reject-btn bodyMediumText5 ${actionStatus[request.id] === 'rejected' ? 'success' :
+                                                        actionStatus[request.id] === 'rejecting' ? 'processing' : ''
+                                                    }`}
+                                                onClick={() => handleRejectRequest(request.id, 'Rejected by admin')}
+                                                disabled={loading || actionLoading === request.id ||
+                                                    ['approved', 'rejected'].includes(actionStatus[request.id])}
+                                            >
+                                                {actionStatus[request.id] === 'rejecting' ? 'Rejecting...' :
+                                                    actionStatus[request.id] === 'rejected' ? 'Rejected ✗' : 'Reject'}
+                                            </button>
+                                        </div>
                                     </div>
-                                    <div className="leave-details">
-                                        <span className="leave-type">{timesheet.hours}h - {new Date(timesheet.date).toLocaleDateString()}</span>
-                                         <span className="leave-date bodyRegularText4"> Status: {timesheet.status  ? timesheet.status.charAt(0).toUpperCase() + timesheet.status.slice(1).toLowerCase() : 'Pending'}
-                                         </span>
+                                ))
+                            )}
+                        </div>
+                    </div>
 
-                                    </div>
-                                    <div style={{
-                                        fontSize: '0.875rem',
-                                        color: '#6b7280',
-                                        marginTop: '0.5rem',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '0.5rem',
-                                    }}>
-                                        <div className='bodyRegularText4' style={{ marginBottom: '0.25rem', fontWeight: '500' }}>Tasks:</div>
-                                        <div style={{
-                                            display: 'flex',
-                                            flexWrap: 'wrap',
-                                            gap: '0.5rem',
-                                            marginTop: '0.25rem'
-                                        }}>
-                                            {(() => {
-                                                try {
-                                                    let tasks = [];
 
-                                                    if (!timesheet.tasks || timesheet.tasks === '') {
-                                                        return (
-                                                            <div className="task_bubble" style={{
-                                                                display: 'inline-flex',
-                                                                alignItems: 'center',
-                                                                justifyContent: 'space-between',
-                                                                padding: '0.25rem 0.5rem',
-                                                                backgroundColor: '#f3f4f6',
-                                                                borderRadius: '0.375rem',
-                                                                border: '1px solid #e5e7eb',
-                                                                fontSize: '0.75rem',
-                                                                minWidth: '120px'
-                                                            }}>
-                                                                <span className="task_text" style={{ color: '#6b7280' }}>
-                                                                    No tasks specified
-                                                                </span>
-                                                            </div>
-                                                        );
-                                                    }
 
-                                                    if (Array.isArray(timesheet.tasks)) {
-                                                        tasks = timesheet.tasks;
-                                                    } else if (typeof timesheet.tasks === 'string') {
-                                                        tasks = JSON.parse(timesheet.tasks);
-                                                    }
+                    {/* Pending Timesheets */}
+                    <div className="admin-section">
+                        <h2 className="section-title bodyRegularText3">Pending Timesheets</h2>
+                        <div className="leave-requests">
+                            {loading ? (
+                                <div className="loading-state bodyRegularText4" style={{
+                                    textAlign: 'center',
+                                    padding: '2rem',
+                                    color: '#6b7280'
+                                }}>
+                                    Loading timesheets...
+                                </div>
+                            ) : pendingTimesheets.length === 0 ? (
+                                <div className="empty-state bodyRegularText4" style={{
+                                    textAlign: 'center',
+                                    padding: '2rem',
+                                    color: '#6b7280'
+                                }}>
+                                    No pending timesheets at the moment
+                                </div>
+                            ) : (
+                                pendingTimesheets.map(timesheet => (
+                                    <div key={timesheet.id} className="leave-request-card">
+                                        <div className="request-info">
+                                            <div className="employee-name bodyMediumText3">
+                                                {timesheet.employee_name || `Employee ${timesheet.employee_id || 'Unknown'}`}
+                                            </div>
+                                            <div className="leave-details">
+                                                <span className="leave-type">{timesheet.hours}h - {new Date(timesheet.date).toLocaleDateString()}</span>
+                                                <span className="leave-date bodyRegularText4"> Status: {timesheet.status ? timesheet.status.charAt(0).toUpperCase() + timesheet.status.slice(1).toLowerCase() : 'Pending'}
+                                                </span>
 
-                                                    if (!Array.isArray(tasks) || tasks.length === 0) {
-                                                        return (
-                                                            <div className="task_bubble" style={{
-                                                                display: 'inline-flex',
-                                                                alignItems: 'center',
-                                                                justifyContent: 'space-between',
-                                                                padding: '0.25rem 0.5rem',
-                                                                backgroundColor: '#f3f4f6',
-                                                                borderRadius: '0.375rem',
-                                                                border: '1px solid #e5e7eb',
-                                                                fontSize: '0.75rem',
-                                                                minWidth: '120px'
-                                                            }}>
-                                                                <span className="task_text" style={{ color: '#6b7280' }}>
-                                                                    No tasks specified
-                                                                </span>
-                                                            </div>
-                                                        );
-                                                    }
+                                            </div>
+                                            <div style={{
+                                                fontSize: '0.875rem',
+                                                color: '#6b7280',
+                                                marginTop: '0.5rem',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '0.5rem',
+                                            }}>
+                                                <div className='bodyRegularText4' style={{ marginBottom: '0.25rem', fontWeight: '500' }}>Tasks:</div>
+                                                <div style={{
+                                                    display: 'flex',
+                                                    flexWrap: 'wrap',
+                                                    gap: '0.5rem',
+                                                    marginTop: '0.25rem'
+                                                }}>
+                                                    {(() => {
+                                                        try {
+                                                            let tasks = [];
 
-                                                    return tasks.map((task, index) => {
-                                                        const hasDescription = task.description && task.description.trim() !== '';
-                                                        return (
-                                                            <div key={task.id || index} className="task_bubble" style={{
-                                                                display: 'inline-flex',
-                                                                alignItems: 'center',
-                                                                justifyContent: 'space-between',
-                                                                padding: '0.25rem 0.5rem',
-                                                                backgroundColor: '#eff6ff',
-                                                                borderRadius: '0.375rem',
-                                                                border: '1px solid #bfdbfe',
-                                                                fontSize: '0.75rem',
-                                                                minWidth: '120px',
-                                                                gap: '0.5rem'
-                                                            }}>
-                                                                <span className="task_text" style={{
-                                                                    color: '#1e40af',
-                                                                    flex: 1,
-                                                                    minWidth: 0,
-                                                                    overflow: 'hidden',
-                                                                    textOverflow: 'ellipsis',
-                                                                    whiteSpace: 'nowrap'
-                                                                }}>
-                                                                    {task.taskTitle || task.task || 'No title'}
-                                                                </span>
-                                                                <span className="task_duration" style={{
-                                                                    color: '#1d4ed8',
-                                                                    fontWeight: '500',
-                                                                    flexShrink: 0
-                                                                }}>
-                                                                    {task.timeSpent || (task.hours ? `${task.hours}h` : (task.minutes ? `${task.minutes}min` : '0min'))}
-                                                                </span>
-                                                                {hasDescription && (
-                                                                    <Tooltip 
-                                                                        title={task.description}
-                                                                        arrow
-                                                                        placement="top"
-                                                                        slotProps={{
-                                                                            tooltip: {
-                                                                                sx: {
-                                                                                    bgcolor: '#1f2937',
-                                                                                    fontSize: '12px',
-                                                                                    maxWidth: '250px',
-                                                                                    padding: '8px 12px',
-                                                                                    '& .MuiTooltip-arrow': {
-                                                                                        color: '#1f2937',
-                                                                                    },
-                                                                                },
-                                                                            },
-                                                                        }}
-                                                                    >
-                                                                        <div style={{
-                                                                            display: 'flex',
-                                                                            alignItems: 'center',
-                                                                            cursor: 'pointer',
-                                                                            marginLeft: '4px'
+                                                            if (!timesheet.tasks || timesheet.tasks === '') {
+                                                                return (
+                                                                    <div className="task_bubble" style={{
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        justifyContent: 'space-between',
+                                                                        padding: '0.25rem 0.5rem',
+                                                                        backgroundColor: '#f3f4f6',
+                                                                        borderRadius: '0.375rem',
+                                                                        border: '1px solid #e5e7eb',
+                                                                        fontSize: '0.75rem',
+                                                                        minWidth: '120px'
+                                                                    }}>
+                                                                        <span className="task_text" style={{ color: '#6b7280' }}>
+                                                                            No tasks specified
+                                                                        </span>
+                                                                    </div>
+                                                                );
+                                                            }
+
+                                                            if (Array.isArray(timesheet.tasks)) {
+                                                                tasks = timesheet.tasks;
+                                                            } else if (typeof timesheet.tasks === 'string') {
+                                                                tasks = JSON.parse(timesheet.tasks);
+                                                            }
+
+                                                            if (!Array.isArray(tasks) || tasks.length === 0) {
+                                                                return (
+                                                                    <div className="task_bubble" style={{
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        justifyContent: 'space-between',
+                                                                        padding: '0.25rem 0.5rem',
+                                                                        backgroundColor: '#f3f4f6',
+                                                                        borderRadius: '0.375rem',
+                                                                        border: '1px solid #e5e7eb',
+                                                                        fontSize: '0.75rem',
+                                                                        minWidth: '120px'
+                                                                    }}>
+                                                                        <span className="task_text" style={{ color: '#6b7280' }}>
+                                                                            No tasks specified
+                                                                        </span>
+                                                                    </div>
+                                                                );
+                                                            }
+
+                                                            return tasks.map((task, index) => {
+                                                                const hasDescription = task.description && task.description.trim() !== '';
+                                                                return (
+                                                                    <div key={task.id || index} className="task_bubble" style={{
+                                                                        display: 'inline-flex',
+                                                                        alignItems: 'center',
+                                                                        justifyContent: 'space-between',
+                                                                        padding: '0.25rem 0.5rem',
+                                                                        backgroundColor: '#eff6ff',
+                                                                        borderRadius: '0.375rem',
+                                                                        border: '1px solid #bfdbfe',
+                                                                        fontSize: '0.75rem',
+                                                                        minWidth: '120px',
+                                                                        gap: '0.5rem'
+                                                                    }}>
+                                                                        <span className="task_text" style={{
+                                                                            color: '#1e40af',
+                                                                            flex: 1,
+                                                                            minWidth: 0,
+                                                                            overflow: 'hidden',
+                                                                            textOverflow: 'ellipsis',
+                                                                            whiteSpace: 'nowrap'
                                                                         }}>
-                                                                            <Info size={12} style={{ color: '#3b82f6' }} />
-                                                                        </div>
-                                                                    </Tooltip>
-                                                                )}
-                                                            </div>
-                                                        );
-                                                    });
-                                                } catch (error) {
-                                                    console.warn('Error parsing tasks for timesheet:', timesheet.id, error);
-                                                    return (
-                                                        <div className="task_bubble" style={{
-                                                            display: 'inline-flex',
-                                                            alignItems: 'center',
-                                                            padding: '0.25rem 0.5rem',
-                                                            backgroundColor: '#fef2f2',
-                                                            borderRadius: '0.375rem',
-                                                            border: '1px solid #fecaca',
-                                                            fontSize: '0.75rem',
-                                                            color: '#dc2626'
-                                                        }}>
-                                                            <span className="task_text">
-                                                                {typeof timesheet.tasks === 'string' ? timesheet.tasks : 'Tasks format error'}
-                                                            </span>
-                                                        </div>
-                                                    );
-                                                }
-                                            })()}
+                                                                            {task.taskTitle || task.task || 'No title'}
+                                                                        </span>
+                                                                        <span className="task_duration" style={{
+                                                                            color: '#1d4ed8',
+                                                                            fontWeight: '500',
+                                                                            flexShrink: 0
+                                                                        }}>
+                                                                            {task.timeSpent || (task.hours ? `${task.hours}h` : (task.minutes ? `${task.minutes}min` : '0min'))}
+                                                                        </span>
+                                                                        {hasDescription && (
+                                                                            <Tooltip
+                                                                                title={task.description}
+                                                                                arrow
+                                                                                placement="top"
+                                                                                slotProps={{
+                                                                                    tooltip: {
+                                                                                        sx: {
+                                                                                            bgcolor: '#1f2937',
+                                                                                            fontSize: '12px',
+                                                                                            maxWidth: '250px',
+                                                                                            padding: '8px 12px',
+                                                                                            '& .MuiTooltip-arrow': {
+                                                                                                color: '#1f2937',
+                                                                                            },
+                                                                                        },
+                                                                                    },
+                                                                                }}
+                                                                            >
+                                                                                <div style={{
+                                                                                    display: 'flex',
+                                                                                    alignItems: 'center',
+                                                                                    cursor: 'pointer',
+                                                                                    marginLeft: '4px'
+                                                                                }}>
+                                                                                    <Info size={12} style={{ color: '#3b82f6' }} />
+                                                                                </div>
+                                                                            </Tooltip>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            });
+                                                        } catch (error) {
+                                                            console.warn('Error parsing tasks for timesheet:', timesheet.id, error);
+                                                            return (
+                                                                <div className="task_bubble" style={{
+                                                                    display: 'inline-flex',
+                                                                    alignItems: 'center',
+                                                                    padding: '0.25rem 0.5rem',
+                                                                    backgroundColor: '#fef2f2',
+                                                                    borderRadius: '0.375rem',
+                                                                    border: '1px solid #fecaca',
+                                                                    fontSize: '0.75rem',
+                                                                    color: '#dc2626'
+                                                                }}>
+                                                                    <span className="task_text">
+                                                                        {typeof timesheet.tasks === 'string' ? timesheet.tasks : 'Tasks format error'}
+                                                                    </span>
+                                                                </div>
+                                                            );
+                                                        }
+                                                    })()}
+                                                </div>
+                                            </div>
+                                            {timesheet.note && timesheet.note !== 'No notes' && (
+                                                <div className="leave-reason" style={{
+                                                    fontSize: '0.875rem',
+                                                    color: '#6b7280',
+                                                    marginTop: '0.25rem',
+                                                    fontStyle: 'italic'
+                                                }}>
+                                                    Note: {timesheet.note}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="request-actions">
+                                            <button
+                                                className={`approve-btn ${actionStatus[timesheet.id] === 'approved' ? 'success' :
+                                                        actionStatus[timesheet.id] === 'approving' ? 'processing' : ''
+                                                    }`}
+                                                onClick={() => handleApproveTimesheet(timesheet.id)}
+                                                disabled={loading || actionLoading === timesheet.id ||
+                                                    ['approved', 'rejected'].includes(actionStatus[timesheet.id])}
+                                            >
+                                                {actionStatus[timesheet.id] === 'approving' ? 'Approving...' :
+                                                    actionStatus[timesheet.id] === 'approved' ? 'Approved ✓' : 'Approve'}
+                                            </button>
+                                            <button
+                                                className={`reject-btn ${actionStatus[timesheet.id] === 'rejected' ? 'success' :
+                                                        actionStatus[timesheet.id] === 'rejecting' ? 'processing' : ''
+                                                    }`}
+                                                onClick={() => handleRejectTimesheet(timesheet.id, 'Rejected by admin')}
+                                                disabled={loading || actionLoading === timesheet.id ||
+                                                    ['approved', 'rejected'].includes(actionStatus[timesheet.id])}
+                                            >
+                                                {actionStatus[timesheet.id] === 'rejecting' ? 'Rejecting...' :
+                                                    actionStatus[timesheet.id] === 'rejected' ? 'Rejected ✗' : 'Reject'}
+                                            </button>
                                         </div>
                                     </div>
-                                    {timesheet.note && timesheet.note !== 'No notes' && (
-                                        <div className="leave-reason" style={{
-                                            fontSize: '0.875rem',
-                                            color: '#6b7280',
-                                            marginTop: '0.25rem',
-                                            fontStyle: 'italic'
-                                        }}>
-                                            Note: {timesheet.note}
-                                        </div>
-                                    )}
-                                </div>
-                                  <div className="request-actions">
-                                    <button
-                                        className={`approve-btn ${
-                                            actionStatus[timesheet.id] === 'approved' ? 'success' : 
-                                            actionStatus[timesheet.id] === 'approving' ? 'processing' : ''
-                                        }`}
-                                        onClick={() => handleApproveTimesheet(timesheet.id)}
-                                        disabled={loading || actionLoading === timesheet.id || 
-                                                 ['approved', 'rejected'].includes(actionStatus[timesheet.id])}
-                                    >
-                                        {actionStatus[timesheet.id] === 'approving' ? 'Approving...' : 
-                                         actionStatus[timesheet.id] === 'approved' ? 'Approved ✓' : 'Approve'}
-                                    </button>
-                                    <button
-                                        className={`reject-btn ${
-                                            actionStatus[timesheet.id] === 'rejected' ? 'success' : 
-                                            actionStatus[timesheet.id] === 'rejecting' ? 'processing' : ''
-                                        }`}
-                                        onClick={() => handleRejectTimesheet(timesheet.id, 'Rejected by admin')}
-                                        disabled={loading || actionLoading === timesheet.id || 
-                                                 ['approved', 'rejected'].includes(actionStatus[timesheet.id])}
-                                    >
-                                        {actionStatus[timesheet.id] === 'rejecting' ? 'Rejecting...' : 
-                                         actionStatus[timesheet.id] === 'rejected' ? 'Rejected ✗' : 'Reject'}
-                                    </button>
-                                </div>
-                            </div>
-                        ))
-                    )}
-                </div>
-            </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
 
-             {/* Timesheet  Alerts */}
-            {(timesheetCompliance.warnings.filter(w => !dismissedAlerts.warnings.includes(`${w.employee_id}-${w.date}`)).length > 0 || 
-              timesheetCompliance.autoLeaves.filter(a => !dismissedAlerts.autoLeaves.includes(`${a.employee_id}-${a.date}`)).length > 0) && (
-                <div className="admin-section">
-                    <h2 className="section-title bodyRegularText3">Timesheet  Alerts</h2>
-                    <div className="leave-requests">
-                        {/* Warnings - Day +1 */}
-                        {timesheetCompliance.warnings.filter(w => !dismissedAlerts.warnings.includes(`${w.employee_id}-${w.date}`)).map((warning, idx) => (
-                            <div key={`warning-${idx}`} className="leave-request-card" style={{
-                                backgroundColor: '#fffbeb',
-                                borderLeft: '4px solid #f59e0b',
-                                position: 'relative'
-                            }}>
-                                <button
-                                    onClick={() => setDismissedAlerts(prev => ({
-                                        ...prev,
-                                        warnings: [...prev.warnings, `${warning.employee_id}-${warning.date}`]
-                                    }))}
-                                    style={{
-                                        position: 'absolute',
-                                        top: '0.5rem',
-                                        right: '0.5rem',
-                                        background: 'transparent',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        padding: '0.25rem',
-                                        borderRadius: '0.25rem',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        transition: 'background-color 0.2s'
-                                    }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef3c7'}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                    title="Dismiss alert"
-                                >
-                                    <X size={16} style={{ color: '#92400e' }} />
-                                </button>
-                                <div className="request-info">
-                                    <div className="employee-name bodyMediumText3" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <AlertTriangle size={18} style={{ color: '#f59e0b' }} />
-                                        {warning.employee_name}
-                                    </div>
-                                    <div className="leave-details">
-                                        {/* <span className="leave-type" style={{ color: '#92400e', backgroundColor: '#fef3c7' }}></span> */}
-                                        <span className="leave-date bodyRegularText5">
-                                            Missing timesheet for {new Date(warning.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                        </span>
-                                    </div>
-                                    {/* <div className="leave-reason bodyRegularText4" style={{
+                    {/* Timesheet  Alerts */}
+                    {(timesheetCompliance.warnings.filter(w => !dismissedAlerts.warnings.includes(`${w.employee_id}-${w.date}`)).length > 0 ||
+                        timesheetCompliance.autoLeaves.filter(a => !dismissedAlerts.autoLeaves.includes(`${a.employee_id}-${a.date}`)).length > 0) && (
+                            <div className="admin-section">
+                                <h2 className="section-title bodyRegularText3">Timesheet  Alerts</h2>
+                                <div className="leave-requests">
+                                    {/* Warnings - Day +1 */}
+                                    {timesheetCompliance.warnings.filter(w => !dismissedAlerts.warnings.includes(`${w.employee_id}-${w.date}`)).map((warning, idx) => (
+                                        <div key={`warning-${idx}`} className="leave-request-card" style={{
+                                            backgroundColor: '#fffbeb',
+                                            borderLeft: '4px solid #f59e0b',
+                                            position: 'relative'
+                                        }}>
+                                            <button
+                                                onClick={() => setDismissedAlerts(prev => ({
+                                                    ...prev,
+                                                    warnings: [...prev.warnings, `${warning.employee_id}-${warning.date}`]
+                                                }))}
+                                                style={{
+                                                    position: 'absolute',
+                                                    top: '0.5rem',
+                                                    right: '0.5rem',
+                                                    background: 'transparent',
+                                                    border: 'none',
+                                                    cursor: 'pointer',
+                                                    padding: '0.25rem',
+                                                    borderRadius: '0.25rem',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    transition: 'background-color 0.2s'
+                                                }}
+                                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef3c7'}
+                                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                title="Dismiss alert"
+                                            >
+                                                <X size={16} style={{ color: '#92400e' }} />
+                                            </button>
+                                            <div className="request-info">
+                                                <div className="employee-name bodyMediumText3" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <AlertTriangle size={18} style={{ color: '#f59e0b' }} />
+                                                    {warning.employee_name}
+                                                </div>
+                                                <div className="leave-details">
+                                                    {/* <span className="leave-type" style={{ color: '#92400e', backgroundColor: '#fef3c7' }}></span> */}
+                                                    <span className="leave-date bodyRegularText5">
+                                                        Missing timesheet for {new Date(warning.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                    </span>
+                                                </div>
+                                                {/* <div className="leave-reason bodyRegularText4" style={{
                                         fontSize: '0.875rem',
                                         color: '#78350f',
                                         marginTop: '0.25rem'
                                     }}>
                                         {warning.message}
                                     </div> */}
-                                </div>
-                            </div>
-                        ))}
+                                            </div>
+                                        </div>
+                                    ))}
 
-                        {/* Auto-Leave Deductions - Day +2 */}
-                        {timesheetCompliance.autoLeaves.filter(a => !dismissedAlerts.autoLeaves.includes(`${a.employee_id}-${a.date}`)).map((autoLeave, idx) => (
-                            <div key={`auto-leave-${idx}`} className="leave-request-card" style={{
-                                backgroundColor: '#fef2f2',
-                                borderLeft: '4px solid #ef4444',
-                                position: 'relative'
-                            }}>
-                                <button
-                                    onClick={() => setDismissedAlerts(prev => ({
-                                        ...prev,
-                                        autoLeaves: [...prev.autoLeaves, `${autoLeave.employee_id}-${autoLeave.date}`]
-                                    }))}
-                                    style={{
-                                        position: 'absolute',
-                                        top: '0.5rem',
-                                        right: '0.5rem',
-                                        background: 'transparent',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        padding: '0.25rem',
-                                        borderRadius: '0.25rem',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        transition: 'background-color 0.2s'
-                                    }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fecaca'}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                    title="Dismiss alert"
-                                >
-                                    <X size={16} style={{ color: '#991b1b' }} />
-                                </button>
-                                <div className="request-info">
-                                    <div className="employee-name bodyMediumText3" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                        <AlertTriangle size={18} style={{ color: '#ef4444' }} />
-                                        {autoLeave.employee_name}
-                                    </div>
-                                    <div className="leave-details">
-                                        <span className="leave-type" style={{ color: '#991b1b', backgroundColor: '#fecaca' }}></span>
-                                        <span className="leave-date bodyRegularText5">
-                                            Missing timesheet for {new Date(autoLeave.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                        </span>
-                                    </div>
-                                    <div className="leave-reason bodyRegularText4" style={{
-                                        fontSize: '0.875rem',
-                                        color: '#7f1d1d',
-                                        marginTop: '0.25rem',
-                                        fontWeight: '600'
-                                    }}>
-                                        {autoLeave.status === 'deducted' 
-                                            ? `Leave has been deducted for ${autoLeave.date}.`
-                                            : autoLeave.status === 'already_processed'
-                                            ? `Leave already deducted for ${autoLeave.date}.`
-                                            : `${autoLeave.message} - Leave has been deducted.`
-                                        }
-                                    </div>
+                                    {/* Auto-Leave Deductions - Day +2 */}
+                                    {timesheetCompliance.autoLeaves.filter(a => !dismissedAlerts.autoLeaves.includes(`${a.employee_id}-${a.date}`)).map((autoLeave, idx) => (
+                                        <div key={`auto-leave-${idx}`} className="leave-request-card" style={{
+                                            backgroundColor: '#fef2f2',
+                                            borderLeft: '4px solid #ef4444',
+                                            position: 'relative'
+                                        }}>
+                                            <button
+                                                onClick={() => setDismissedAlerts(prev => ({
+                                                    ...prev,
+                                                    autoLeaves: [...prev.autoLeaves, `${autoLeave.employee_id}-${autoLeave.date}`]
+                                                }))}
+                                                style={{
+                                                    position: 'absolute',
+                                                    top: '0.5rem',
+                                                    right: '0.5rem',
+                                                    background: 'transparent',
+                                                    border: 'none',
+                                                    cursor: 'pointer',
+                                                    padding: '0.25rem',
+                                                    borderRadius: '0.25rem',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    transition: 'background-color 0.2s'
+                                                }}
+                                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fecaca'}
+                                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                                title="Dismiss alert"
+                                            >
+                                                <X size={16} style={{ color: '#991b1b' }} />
+                                            </button>
+                                            <div className="request-info">
+                                                <div className="employee-name bodyMediumText3" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <AlertTriangle size={18} style={{ color: '#ef4444' }} />
+                                                    {autoLeave.employee_name}
+                                                </div>
+                                                <div className="leave-details">
+                                                    <span className="leave-type" style={{ color: '#991b1b', backgroundColor: '#fecaca' }}></span>
+                                                    <span className="leave-date bodyRegularText5">
+                                                        Missing timesheet for {new Date(autoLeave.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                    </span>
+                                                </div>
+                                                <div className="leave-reason bodyRegularText4" style={{
+                                                    fontSize: '0.875rem',
+                                                    color: '#7f1d1d',
+                                                    marginTop: '0.25rem',
+                                                    fontWeight: '600'
+                                                }}>
+                                                    {autoLeave.status === 'deducted'
+                                                        ? `Leave has been deducted for ${autoLeave.date}.`
+                                                        : autoLeave.status === 'already_processed'
+                                                            ? `Leave already deducted for ${autoLeave.date}.`
+                                                            : `${autoLeave.message} - Leave has been deducted.`
+                                                    }
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
-                        ))}
-                    </div>
-                </div>
-            )}
+                        )}
                 </>
             )}
 
@@ -1857,7 +2042,7 @@ const AdminDashboard = () => {
                     zIndex: 1000,
                     padding: '2rem'
                 }} onClick={closeInventoryImagePreview}>
-                    <div 
+                    <div
                         style={{
                             backgroundColor: 'white',
                             borderRadius: '12px',
@@ -1908,7 +2093,7 @@ const AdminDashboard = () => {
                                         justifyContent: 'space-between',
                                         marginBottom: '1rem'
                                     }}>
-                                        <h4 className="bodyMediumText4" style={{ 
+                                        <h4 className="bodyMediumText4" style={{
                                             margin: 0,
                                             color: '#374151',
                                             display: 'flex',
@@ -1987,8 +2172,8 @@ const AdminDashboard = () => {
                                             justifyContent: 'center',
                                             minHeight: '300px'
                                         }}>
-                                            <img 
-                                                src={getInventoryImageUrl(selectedInventoryItem, 'item')} 
+                                            <img
+                                                src={getInventoryImageUrl(selectedInventoryItem, 'item')}
                                                 alt={selectedInventoryItem.item_image_name || 'Item Image'}
                                                 style={{
                                                     maxWidth: '100%',
@@ -2001,8 +2186,8 @@ const AdminDashboard = () => {
                                                     e.target.nextSibling.style.display = 'flex';
                                                 }}
                                             />
-                                            <div style={{ 
-                                                display: 'none', 
+                                            <div style={{
+                                                display: 'none',
                                                 flexDirection: 'column',
                                                 alignItems: 'center',
                                                 textAlign: 'center'
@@ -2017,8 +2202,8 @@ const AdminDashboard = () => {
                                             </div>
                                         </div>
                                     )}
-                                    <p className="bodyRegularText5" style={{ 
-                                        color: '#6b7280', 
+                                    <p className="bodyRegularText5" style={{
+                                        color: '#6b7280',
                                         marginTop: '0.5rem',
                                         textAlign: 'center'
                                     }}>
@@ -2036,7 +2221,7 @@ const AdminDashboard = () => {
                                         justifyContent: 'space-between',
                                         marginBottom: '1rem'
                                     }}>
-                                        <h4 className="bodyMediumText4" style={{ 
+                                        <h4 className="bodyMediumText4" style={{
                                             margin: 0,
                                             color: '#374151',
                                             display: 'flex',
@@ -2115,8 +2300,8 @@ const AdminDashboard = () => {
                                             justifyContent: 'center',
                                             minHeight: '300px'
                                         }}>
-                                            <img 
-                                                src={getInventoryImageUrl(selectedInventoryItem, 'invoice')} 
+                                            <img
+                                                src={getInventoryImageUrl(selectedInventoryItem, 'invoice')}
                                                 alt={selectedInventoryItem.invoice_image_name || 'Invoice Image'}
                                                 style={{
                                                     maxWidth: '100%',
@@ -2129,8 +2314,8 @@ const AdminDashboard = () => {
                                                     e.target.nextSibling.style.display = 'flex';
                                                 }}
                                             />
-                                            <div style={{ 
-                                                display: 'none', 
+                                            <div style={{
+                                                display: 'none',
                                                 flexDirection: 'column',
                                                 alignItems: 'center',
                                                 textAlign: 'center'
@@ -2145,8 +2330,8 @@ const AdminDashboard = () => {
                                             </div>
                                         </div>
                                     )}
-                                    <p className="bodyRegularText5" style={{ 
-                                        color: '#6b7280', 
+                                    <p className="bodyRegularText5" style={{
+                                        color: '#6b7280',
                                         marginTop: '0.5rem',
                                         textAlign: 'center'
                                     }}>
@@ -2169,6 +2354,31 @@ const AdminDashboard = () => {
                 </div>
             )}
 
+            {/* Edit Reimbursement Modal */}
+            {editReimbursementOpen && reimbursementToEdit && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000,
+                    padding: '2rem'
+                }} onClick={closeEditReimbursement}>
+                    <div onClick={(e) => e.stopPropagation()}>
+                        <ReimbursementRequestForm
+                            onClose={closeEditReimbursement}
+                            onSuccess={handleReimbursementUpdateSuccess}
+                            editRequest={reimbursementToEdit}
+                        />
+                    </div>
+                </div>
+            )}
+
             {/* Receipt Preview Modal */}
             {receiptPreviewOpen && selectedReimbursement && (
                 <div style={{
@@ -2184,7 +2394,7 @@ const AdminDashboard = () => {
                     zIndex: 1000,
                     padding: '2rem'
                 }} onClick={closeReceiptPreview}>
-                    <div 
+                    <div
                         style={{
                             backgroundColor: 'white',
                             borderRadius: '12px',
@@ -2234,7 +2444,7 @@ const AdminDashboard = () => {
                                         justifyContent: 'space-between',
                                         marginBottom: '1rem'
                                     }}>
-                                        <h4 className="bodyMediumText4" style={{ 
+                                        <h4 className="bodyMediumText4" style={{
                                             margin: 0,
                                             color: '#374151',
                                             display: 'flex',
@@ -2313,8 +2523,8 @@ const AdminDashboard = () => {
                                             justifyContent: 'center',
                                             minHeight: '400px'
                                         }}>
-                                            <img 
-                                                src={getReceiptImageUrl(selectedReimbursement)} 
+                                            <img
+                                                src={getReceiptImageUrl(selectedReimbursement)}
                                                 alt={selectedReimbursement.receipt_name || 'Receipt'}
                                                 style={{
                                                     maxWidth: '100%',
@@ -2327,8 +2537,8 @@ const AdminDashboard = () => {
                                                     e.target.nextSibling.style.display = 'flex';
                                                 }}
                                             />
-                                            <div style={{ 
-                                                display: 'none', 
+                                            <div style={{
+                                                display: 'none',
                                                 flexDirection: 'column',
                                                 alignItems: 'center',
                                                 textAlign: 'center'
@@ -2343,8 +2553,8 @@ const AdminDashboard = () => {
                                             </div>
                                         </div>
                                     )}
-                                    <p className="bodyRegularText5" style={{ 
-                                        color: '#6b7280', 
+                                    <p className="bodyRegularText5" style={{
+                                        color: '#6b7280',
                                         marginTop: '0.5rem',
                                         textAlign: 'center'
                                     }}>

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, DollarSign, FileText, CheckCircle, Calendar } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, DollarSign, FileText, CheckCircle, Calendar, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { reimbursementApi } from '../../../utils/supabase';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
@@ -13,11 +13,11 @@ const SuccessModal = ({ message, onClose }) => {
       left: 0,
       right: 0,
       bottom: 0,
-      // backgroundColor: 'rgba(0, 0, 0, 0.6)',
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      zIndex: 1001,
+      zIndex: 9999,
     }}>
       <div style={{
         backgroundColor: 'white',
@@ -36,6 +36,52 @@ const SuccessModal = ({ message, onClose }) => {
           style={{
             padding: '0.5rem 1.5rem',
             backgroundColor: '#10b981',
+            color: 'white',
+            borderRadius: '0.5rem',
+            border: 'none',
+            cursor: 'pointer',
+            transition: 'background-color 150ms ease'
+          }}
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// Helper component for the Error Modal
+const ErrorModal = ({ message, onClose }) => {
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 9999,
+    }}>
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '0.75rem',
+        padding: '2rem',
+        maxWidth: '350px',
+        width: '90%',
+        textAlign: 'center',
+        boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+      }}>
+        <AlertCircle style={{ width: '3rem', height: '3rem', color: '#ef4444', margin: '0 auto 1rem' }} />
+        <h3 className="bodyMediumText2" style={{ color: '#ef4444', marginBottom: '0.5rem' }}>Error</h3>
+        <p className="bodyRegularText4" style={{ color: '#4b5563', marginBottom: '1.5rem' }}>{message}</p>
+        <button
+          onClick={onClose}
+          style={{
+            padding: '0.5rem 1.5rem',
+            backgroundColor: '#ef4444',
             color: 'white',
             borderRadius: '0.5rem',
             border: 'none',
@@ -227,21 +273,8 @@ const styles = {
   }
 };
 
-const ReimbursementRequestForm = ({ onClose, onSuccess }) => {
-  const { user } = useAuth();
-  const [formData, setFormData] = useState({
-    category: '',
-    description: '',
-    amount: '',
-    date: new Date().toISOString().split('T')[0]
-  });
-  const [receiptFile, setReceiptFile] = useState(null);
-  const [fileError, setFileError] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [successMessage, setSuccessMessage] = useState(null);
-  const [errors, setErrors] = useState({});
-
- const categories = [
+// Categories array defined outside component for use in initialization
+const categories = [
   { value: 'office_supplies', label: 'Office Supplies' },
   { value: 'hardware', label: 'Hardware' },
   { value: 'software', label: 'Software' },
@@ -250,6 +283,100 @@ const ReimbursementRequestForm = ({ onClose, onSuccess }) => {
   { value: 'training', label: 'Training' },
   { value: 'other', label: 'Other' }
 ];
+
+// Parse category value from edit request
+const getCategoryValue = (categoryLabel) => {
+  if (!categoryLabel) return '';
+  
+  console.log('🔍 Looking for category:', categoryLabel);
+  
+  // Try exact match first
+  let category = categories.find(c => c.label === categoryLabel || c.value === categoryLabel);
+  
+  // Try case-insensitive match
+  if (!category) {
+    category = categories.find(c => 
+      c.label.toLowerCase() === categoryLabel.toLowerCase() || 
+      c.value.toLowerCase() === categoryLabel.toLowerCase()
+    );
+  }
+  
+  // Try partial match (e.g., "Software" matches "software")
+  if (!category) {
+    category = categories.find(c => 
+      categoryLabel.toLowerCase().includes(c.value.toLowerCase()) ||
+      c.label.toLowerCase().includes(categoryLabel.toLowerCase())
+    );
+  }
+  
+  console.log('✅ Found category:', category);
+  return category ? category.value : '';
+};
+
+const ReimbursementRequestForm = ({ onClose, onSuccess, editRequest = null }) => {
+  const { user } = useAuth();
+
+  const isEditing = !!editRequest;
+  
+  // Get initial form data based on mode (new or edit)
+  const getInitialFormData = () => ({
+    category: '',
+    description: '',
+    amount: '',
+    date: new Date().toISOString().split('T')[0]
+  });
+  
+  const [formData, setFormData] = useState(getInitialFormData());
+  const [initialFormData, setInitialFormData] = useState(getInitialFormData());
+  const [isDirty, setIsDirty] = useState(false);
+  const [receiptFile, setReceiptFile] = useState(null);
+  const [initialReceiptFile, setInitialReceiptFile] = useState(null);
+  const [fileError, setFileError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successMessage, setSuccessMessage] = useState(null);
+  const [errorMessage, setErrorMessage] = useState(null);
+  const [errors, setErrors] = useState({});
+
+  // Initialize form data when editRequest changes
+  useEffect(() => {
+    if (isEditing && editRequest) {
+      const categoryValue = getCategoryValue(editRequest.category);
+      console.log('🔄 Edit mode - Initializing form data:', {
+        category: editRequest.category,
+        categoryValue: categoryValue,
+        description: editRequest.description,
+        amount: editRequest.amount,
+        date: editRequest.date
+      });
+      const initialData = {
+        category: categoryValue,
+        description: editRequest.description || '',
+        amount: editRequest.amount?.toString() || '',
+        date: editRequest.date || new Date().toISOString().split('T')[0]
+      };
+      setFormData(initialData);
+      setInitialFormData(initialData);
+      setIsDirty(false);
+    } else {
+      // Reset for new request
+      const initialData = getInitialFormData();
+      setFormData(initialData);
+      setInitialFormData(initialData);
+      setIsDirty(false);
+    }
+  }, [isEditing, editRequest]);
+
+  // Check if form is dirty whenever formData changes
+  useEffect(() => {
+    const formDataChanged = JSON.stringify(formData) !== JSON.stringify(initialFormData);
+    const receiptChanged = receiptFile !== initialReceiptFile;
+    setIsDirty(formDataChanged || receiptChanged);
+  }, [formData, initialFormData, receiptFile, initialReceiptFile]);
+
+  // Debug: Log formData changes
+  useEffect(() => {
+    console.log('📊 Current formData:', formData);
+  }, [formData]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -261,6 +388,7 @@ const ReimbursementRequestForm = ({ onClose, onSuccess }) => {
   };
 
   const handleSelectChange = (name, value) => {
+    console.log(`📝 Select changed - ${name}:`, value);
     setFormData(prev => ({ ...prev, [name]: value }));
     // Clear error when user selects
     if (errors[name]) {
@@ -283,7 +411,8 @@ const ReimbursementRequestForm = ({ onClose, onSuccess }) => {
     if (!formData.date) {
       newErrors.date = 'Please select a date';
     }
-    if (!receiptFile) {
+    // Only require receipt file for new requests, not for edits
+    if (!isEditing && !receiptFile) {
       newErrors.receipt = 'Please upload a receipt';
     }
     
@@ -341,24 +470,41 @@ const ReimbursementRequestForm = ({ onClose, onSuccess }) => {
         category: categories.find(c => c.value === formData.category)?.label || formData.category,
         description: formData.description,
         amount: parseFloat(formData.amount),
-        date: formData.date
+        date: formData.date,
+        // Include existing receipt data for updates
+        receipt_url: editRequest?.receipt_url,
+        receipt_path: editRequest?.receipt_path,
+        receipt_name: editRequest?.receipt_name,
+        receipt_type: editRequest?.receipt_type,
+        receipt_size: editRequest?.receipt_size
       };
 
       console.log('📤 Submitting reimbursement request:', reimbursementRequest);
       console.log('📎 Receipt file:', receiptFile);
       
-      // Save to database with file upload
-      const savedRequest = await reimbursementApi.createRequest(reimbursementRequest, receiptFile);
+      let savedRequest;
       
-      // Show success message
-      setSuccessMessage('Your reimbursement request has been submitted for approval.');
-      
-      if (onSuccess) {
-        onSuccess(savedRequest);
+      if (isEditing) {
+        // Update existing request
+        savedRequest = await reimbursementApi.updateRequest(editRequest.id, reimbursementRequest, receiptFile);
+        
+        // Show success modal - onClose will handle calling onSuccess
+        setSuccessMessage('Your reimbursement request has been updated successfully.');
+      } else {
+        // Create new request
+        savedRequest = await reimbursementApi.createRequest(reimbursementRequest, receiptFile);
+        
+        // Show success modal - onClose will handle calling onSuccess
+        setSuccessMessage('Your reimbursement request has been submitted for approval.');
       }
+      
+      // Store saved request for later use in onClose
+      window._lastSavedReimbursementRequest = savedRequest;
     } catch (err) {
       console.error('Error submitting reimbursement request:', err);
-      setFileError(err.message || 'Failed to submit request');
+      const errorMsg = err.message || 'Failed to submit request. Please try again.';
+      setFileError(errorMsg);
+      setErrorMessage(errorMsg);
     } finally {
       setIsSubmitting(false);
     }
@@ -371,8 +517,10 @@ const ReimbursementRequestForm = ({ onClose, onSuccess }) => {
         {/* Header */}
         <div style={styles.header}>
           <div style={styles.headerTitle}>
-            <DollarSign style={styles.headerIcon} />
-            <h2 className="bodyRegularText3" style={styles.title}>New Reimbursement Request</h2>
+            {/* <DollarSign style={styles.headerIcon} /> */}
+            <h2 className="bodyRegularText3" style={styles.title}>
+              {isEditing ? 'Edit Reimbursement Request' : 'New Reimbursement Request'}
+            </h2>
           </div>
           <button onClick={onClose} style={styles.closeButton} disabled={isSubmitting}>
             <X style={{ width: '1.25rem', height: '1.25rem', color: '#6b7280' }} />
@@ -386,6 +534,7 @@ const ReimbursementRequestForm = ({ onClose, onSuccess }) => {
               Category <span style={styles.required}>*</span>
             </label>
             <Select
+              key={`category-select-${formData.category}`}
               value={formData.category}
               onValueChange={(value) => handleSelectChange('category', value)}
               disabled={isSubmitting}
@@ -395,14 +544,25 @@ const ReimbursementRequestForm = ({ onClose, onSuccess }) => {
                 style={{ 
                   width: '100%', 
                   height: '40px',
-                  borderColor: errors.category ? '#ef4444' : undefined
+                  borderColor: errors.category ? '#ef4444' : undefined,
+                  cursor: isSubmitting ? 'not-allowed' : 'pointer'
                 }}
               >
                 <SelectValue placeholder="Select category" />
               </SelectTrigger>
-              <SelectContent className="select-content-high-zindex">
+              <SelectContent 
+                className="select-content-high-zindex"
+                position="popper"
+                sideOffset={4}
+                style={{ zIndex: 9999 }}
+              >
                 {categories.map((cat) => (
-                  <SelectItem key={cat.value} value={cat.value} className="bodyMediumText5">
+                  <SelectItem 
+                    key={cat.value} 
+                    value={cat.value} 
+                    className="bodyMediumText5"
+                    style={{ cursor: 'pointer' }}
+                  >
                     {cat.label}
                   </SelectItem>
                 ))}
@@ -505,7 +665,7 @@ const ReimbursementRequestForm = ({ onClose, onSuccess }) => {
           {/* Receipt Upload */}
           <div style={styles.formGroup}>
             <label className="bodyMediumText5" style={styles.label}>
-              Receipt <span style={styles.required}>*</span>
+              Receipt {isEditing ? '(Optional - upload to replace existing)' : <span style={styles.required}>*</span>}
             </label>
             <div style={{
               ...styles.fileInputWrapper,
@@ -524,7 +684,7 @@ const ReimbursementRequestForm = ({ onClose, onSuccess }) => {
                 <span>Click to upload receipt</span>
                 <span style={styles.fileInfo}>PDF, JPG, PNG up to 1MB</span>
               </label>
-              {receiptFile && (
+              {receiptFile ? (
                 <div style={{
                   ...styles.fileName,
                   display: 'flex',
@@ -537,6 +697,21 @@ const ReimbursementRequestForm = ({ onClose, onSuccess }) => {
                   </div>
                   <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
                     {(receiptFile.size / 1024 / 1024).toFixed(2)} MB
+                  </div>
+                </div>
+              ) : isEditing && editRequest?.receipt_name && (
+                <div style={{
+                  ...styles.fileName,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '0.25rem'
+                }}>
+                  <div style={{ fontWeight: '600', color: '#3b82f6' }}>
+                    📎 Current: {editRequest.receipt_name}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                    Upload a new file to replace
                   </div>
                 </div>
               )}
@@ -578,12 +753,13 @@ const ReimbursementRequestForm = ({ onClose, onSuccess }) => {
               type="submit"
               style={{
                 ...styles.submitButton,
-                backgroundColor: isSubmitting ? '#9ca3af' : '#3b82f6',
-                cursor: isSubmitting ? 'not-allowed' : 'pointer'
+                backgroundColor: isSubmitting || !isDirty ? '#9ca3af' : '#3b82f6',
+                cursor: isSubmitting || !isDirty ? 'not-allowed' : 'pointer'
               }}
-              disabled={isSubmitting}
+              disabled={isSubmitting || !isDirty}
+              title={!isDirty ? 'Make changes to enable submit' : ''}
             >
-              {isSubmitting ? 'Submitting...' : 'Submit Request'}
+              {isSubmitting ? (isEditing ? 'Updating...' : 'Submitting...') : (isEditing ? 'Update Request' : 'Submit Request')}
             </button>
           </div>
         </form>
@@ -595,7 +771,22 @@ const ReimbursementRequestForm = ({ onClose, onSuccess }) => {
           message={successMessage}
           onClose={() => {
             setSuccessMessage(null);
+            // Call onSuccess with the saved request data before closing
+            if (onSuccess && window._lastSavedReimbursementRequest) {
+              onSuccess(window._lastSavedReimbursementRequest);
+              window._lastSavedReimbursementRequest = null;
+            }
             onClose();
+          }}
+        />
+      )}
+      
+      {/* Error Modal Overlay */}
+      {errorMessage && (
+        <ErrorModal
+          message={errorMessage}
+          onClose={() => {
+            setErrorMessage(null);
           }}
         />
       )}

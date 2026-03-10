@@ -18,6 +18,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EmailIcon from '@mui/icons-material/Email';
 import PhoneIcon from '@mui/icons-material/Phone';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
+import { formatFullName } from '../../lib/utils';
 
 const EmployeeTable = ({ 
     employees = [], 
@@ -86,7 +87,7 @@ const EmployeeTable = ({
                             <TableCell>{formatDate(employee.joinDate || employee.join_date)}</TableCell>
                             <TableCell>
                                 <Typography variant="body2">
-                                    {employee.name || 'N/A'}
+                                    {formatFullName(employee, 'N/A')}
                                 </Typography>
                             </TableCell>
                             <TableCell>

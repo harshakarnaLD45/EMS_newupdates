@@ -54,6 +54,12 @@ export const authApi = {
             throw new Error('Invalid email or password');
         }
         
+        // Check if employee is terminated
+        const employeeStatus = (data.status || 'active').toLowerCase();
+        if (employeeStatus === 'terminated') {
+            throw new Error('Your account has been terminated. Please contact HR for assistance.');
+        }
+        
         // Return employee data in user format
         return {
             id: data.id,
@@ -62,7 +68,8 @@ export const authApi = {
             role: data.role || 'employee',
             employee_id: data.employee_id,
             department: data.department,
-            position: data.position
+            position: data.position,
+            status: data.status || 'active'
         };
     },
 
@@ -82,6 +89,12 @@ export const authApi = {
             throw new Error('Invalid admin email or password');
         }
         
+        // Check if admin account is active (not terminated)
+        if (data.is_active === false) {
+            console.error('🚫 Admin account is terminated:', data.name);
+            throw new Error('Your admin account has been terminated. Please contact the system administrator.');
+        }
+        
         // console.log('✅ Admin login successful:', data.name);
         
         // Return admin data in user format
@@ -91,6 +104,8 @@ export const authApi = {
             name: data.name,
             role: data.role || 'admin',
             isAdmin: true,
+            is_active: data.is_active,
+            is_super_admin: data.is_super_admin === true,
             loginType: 'admin'
         };
     },
@@ -924,6 +939,174 @@ export const employeeApi = {
         return data[0];
     },
 
+    // Create a new admin user with all fields
+    async createAdmin(adminData) {
+        console.log('👤 Creating admin with data:', adminData);
+        
+        // Process the admin data with all new fields
+        const processedData = {
+            name: adminData.name,
+            email: adminData.email,
+            password: adminData.password, // For demo purposes, storing as-is. In production, hash it!
+            role: adminData.role || 'Admin',
+            first_name: adminData.first_name || adminData.name?.split(' ')[0] || '',
+            last_name: adminData.last_name || adminData.name?.split(' ').slice(1).join(' ') || '',
+            phone: adminData.phone || '',
+            department: adminData.department || 'Administration',
+            position: adminData.position || 'Administrator',
+            join_date: adminData.join_date || new Date().toISOString().split('T')[0],
+            is_active: adminData.is_active !== false, // Default to true
+            status: adminData.status || 'Active',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+        };
+        
+        const { data, error } = await supabase
+            .from('admins')
+            .insert([processedData])
+            .select();
+        
+        if (error) {
+            console.error('❌ Error creating admin:', error);
+            throw error;
+        }
+        
+        console.log('✅ Admin created successfully:', data[0]);
+        return data[0];
+    },
+
+    // Update an existing admin
+    async updateAdmin(adminId, updates, currentUserRole = null, currentUserId = null, currentUserIsSuperAdmin = false) {
+        console.log('🔄 Updating admin:', adminId, updates, 'Current user role:', currentUserRole, 'Current user ID:', currentUserId, 'Is Super Admin:', currentUserIsSuperAdmin);
+        
+        if (!adminId) {
+            throw new Error('Admin ID is required for update');
+        }
+        
+        // Check if admin is editing their own account
+        const isEditingSelf = currentUserId === adminId;
+        
+        // Check if current user is Super Admin (using boolean or legacy role)
+        const isCurrentUserSuperAdmin = currentUserIsSuperAdmin === true || currentUserRole === 'super_admin';
+        
+        // Security check: Allow if Super Admin OR editing own account
+        if (!isCurrentUserSuperAdmin && !isEditingSelf) {
+            console.error('❌ Access denied: Only Super Admin can update other admin accounts');
+            throw new Error("You don't have access to edit these accounts.");
+        }
+        
+        // First, check if the target admin is a Super Admin
+        const { data: targetAdmin, error: fetchError } = await supabase
+            .from('admins')
+            .select('role, email, is_super_admin')
+            .eq('id', adminId)
+            .single();
+        
+        if (fetchError) {
+            console.error('❌ Error fetching target admin:', fetchError);
+            throw fetchError;
+        }
+        
+        // Additional security: Cannot edit Super Admin unless you're Super Admin
+        const isTargetSuperAdmin = targetAdmin?.is_super_admin === true || targetAdmin?.role === 'super_admin';
+        if (isTargetSuperAdmin && !isCurrentUserSuperAdmin) {
+            console.error('❌ Access denied: Cannot edit Super Admin account');
+            throw new Error("You don't have access to edit these accounts.");
+        }
+        
+        // Process updates
+        const processedUpdates = {
+            ...updates,
+            updated_at: new Date().toISOString()
+        };
+        
+        // If first_name or last_name is being updated, sync the name field
+        if (updates.first_name !== undefined || updates.last_name !== undefined) {
+            const firstName = updates.first_name !== undefined ? updates.first_name : targetAdmin?.first_name;
+            const lastName = updates.last_name !== undefined ? updates.last_name : targetAdmin?.last_name;
+            processedUpdates.name = `${firstName || ''} ${lastName || ''}`.trim();
+            console.log('📝 Syncing admin name field:', processedUpdates.name);
+        }
+        
+        // If is_active is being updated, also update status
+        if (updates.is_active !== undefined) {
+            processedUpdates.status = updates.is_active ? 'Active' : 'Terminated';
+            if (!updates.is_active) {
+                processedUpdates.terminated_at = new Date().toISOString();
+            }
+        }
+        
+        const { data, error } = await supabase
+            .from('admins')
+            .update(processedUpdates)
+            .eq('id', adminId)
+            .select();
+        
+        if (error) {
+            console.error('❌ Error updating admin:', error);
+            throw error;
+        }
+        
+        console.log('✅ Admin updated successfully:', data[0]);
+        return data[0];
+    },
+
+    // Terminate an admin by setting is_active to false
+    async terminateAdmin(adminId, currentUserRole = null, currentUserIsSuperAdmin = false) {
+        console.log('🚫 Terminating admin:', adminId, 'Current user role:', currentUserRole, 'Is Super Admin:', currentUserIsSuperAdmin);
+        
+        if (!adminId) {
+            throw new Error('Admin ID is required for termination');
+        }
+        
+        // Security check: Only Super Admin can terminate admin accounts
+        const isCurrentUserSuperAdmin = currentUserIsSuperAdmin === true || currentUserRole === 'super_admin';
+        if (!isCurrentUserSuperAdmin) {
+            console.error('❌ Access denied: Only Super Admin can terminate admin accounts');
+            throw new Error("You don't have access to terminate these accounts.");
+        }
+        
+        // First, check if the target admin is a Super Admin
+        const { data: targetAdmin, error: fetchError } = await supabase
+            .from('admins')
+            .select('role, email, is_super_admin')
+            .eq('id', adminId)
+            .single();
+        
+        if (fetchError) {
+            console.error('❌ Error fetching target admin:', fetchError);
+            throw fetchError;
+        }
+        
+        // Cannot terminate Super Admin
+        const isTargetSuperAdmin = targetAdmin?.is_super_admin === true || targetAdmin?.role === 'super_admin';
+        if (isTargetSuperAdmin) {
+            console.error('❌ Access denied: Super Admin account cannot be terminated');
+            throw new Error('The Super Admin account cannot be terminated.');
+        }
+        
+        const updates = {
+            is_active: false,
+            status: 'Terminated',
+            terminated_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+        };
+        
+        const { data, error } = await supabase
+            .from('admins')
+            .update(updates)
+            .eq('id', adminId)
+            .select();
+        
+        if (error) {
+            console.error('❌ Error terminating admin:', error);
+            throw error;
+        }
+        
+        console.log('✅ Admin terminated successfully:', data[0]);
+        return data[0];
+    },
+
     async getEmployees() {
         // console.log('📋 Fetching employees from database...');
         
@@ -1548,18 +1731,21 @@ async getAllEmployeesAndAdmins() {
         // Add role field to admins for consistency
         const adminsWithRole = admins.map(admin => ({
             ...admin,
-            role: 'admin',
+            role: admin.role || 'admin',
             isAdmin: true,
             source: 'admins',
             // Map admin fields to match employee structure
             employee_id: admin.id, // Use admin id as employee_id for filtering
-            name: admin.name,
+            // Ensure name is built from first_name/last_name if not present
+            name: admin.name || `${admin.first_name || ''} ${admin.last_name || ''}`.trim(),
+            first_name: admin.first_name || admin.name?.split(' ')[0] || '',
+            last_name: admin.last_name || admin.name?.split(' ').slice(1).join(' ') || '',
             email: admin.email,
             phone: admin.phone || 'N/A',
-            department: 'Administration',
-            position: admin.role || 'Admin',
-            join_date: admin.created_at ? admin.created_at.split('T')[0] : null, 
-            status: admin.is_active ? 'Active' : 'Inactive'
+            department: admin.department || 'Administration',
+            position: admin.position || admin.role || 'Admin',
+            join_date: admin.join_date || (admin.created_at ? admin.created_at.split('T')[0] : null), 
+            status: admin.status || (admin.is_active ? 'Active' : 'Terminated')
         }));
         
         // Combine both arrays
@@ -2436,6 +2622,72 @@ export const reimbursementApi = {
         return data;
     },
 
+    // Update an existing reimbursement request (for employees to edit their pending requests)
+    async updateRequest(requestId, requestData, receiptFile = null) {
+        console.log('✏️ Updating reimbursement request:', requestId, requestData);
+        
+        let receiptUrl = requestData.receipt_url;
+        let receiptPath = requestData.receipt_path;
+        let receiptName = requestData.receipt_name;
+        let receiptType = requestData.receipt_type;
+        let receiptSize = requestData.receipt_size;
+        
+        // Upload new receipt file if provided
+        if (receiptFile) {
+            try {
+                // Delete old receipt file if exists
+                if (receiptPath) {
+                    try {
+                        await emsStorageApi.deleteFile(receiptPath);
+                        console.log('🗑️ Deleted old receipt file:', receiptPath);
+                    } catch (deleteError) {
+                        console.warn('⚠️ Failed to delete old receipt file:', deleteError);
+                    }
+                }
+                
+                const uploadResult = await emsStorageApi.uploadFile(
+                    receiptFile, 
+                    'reimbursements/receipts',
+                    requestData.employee_id
+                );
+                receiptUrl = uploadResult.publicUrl;
+                receiptPath = uploadResult.path;
+                receiptName = receiptFile.name;
+                receiptType = receiptFile.type;
+                receiptSize = receiptFile.size;
+            } catch (uploadError) {
+                console.error('❌ Failed to upload new receipt:', uploadError);
+                throw new Error('Failed to upload receipt file');
+            }
+        }
+        
+        const { data, error } = await supabase
+            .from('reimbursement_requests')
+            .update({
+                category: requestData.category,
+                description: requestData.description,
+                amount: requestData.amount,
+                date: requestData.date,
+                receipt_name: receiptName,
+                receipt_url: receiptUrl,
+                receipt_path: receiptPath,
+                receipt_type: receiptType,
+                receipt_size: receiptSize,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', requestId)
+            .select()
+            .single();
+        
+        if (error) {
+            console.error('❌ Error updating reimbursement request:', error);
+            throw error;
+        }
+        
+        console.log('✅ Reimbursement request updated:', data);
+        return data;
+    },
+
     // Delete a reimbursement request
     async deleteRequest(requestId) {
         console.log('🗑️ Deleting reimbursement request:', requestId);
@@ -2556,7 +2808,14 @@ export const inventoryApi = {
                 invoice_image_size: invoiceImageFile?.size || itemData.invoice_image_size,
                 added_by: itemData.added_by || 'Employee'
             }])
-            .select()
+            .select(`
+                *,
+                employees:employee_id (
+                    name,
+                    email,
+                    employee_id
+                )
+            `)
             .single();
         
         if (error) {

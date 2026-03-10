@@ -25,11 +25,13 @@
     "date-fns": "^4.1.0",
     "dayjs": "^1.11.18",
     "lucide-react": "^0.544.0",
+    "next-themes": "^0.4.6",
     "react": "^19.2.0",
     "react-day-picker": "^9.11.1",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.9.3",
     "recharts": "^3.2.1",
+    "sonner": "^2.0.7",
     "tailwind-merge": "^3.4.0",
     "tailwindcss": "^3.4.1",
     "web-vitals": "^2.1.4",
@@ -60,7 +62,7 @@
     ]
   },
   "devDependencies": {
-    "@types/react": "^19.2.2",
+    "@types/react": "^19.2.14",
     "react-scripts": "^5.0.1"
   }
 }

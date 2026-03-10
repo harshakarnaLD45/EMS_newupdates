@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import AccessDenied from './ui/AccessDenied';
 
 const ProtectedRoute = ({ children, requiredRole = null, adminOnly = false }) => {
-    const { user, isAuthenticated, isAdmin, loading } = useAuth();
+    const { user, isAuthenticated, isAdmin, isTerminated, loading } = useAuth();
     const location = useLocation();
 
     console.log('🛡️ ProtectedRoute:', { 
@@ -13,7 +13,8 @@ const ProtectedRoute = ({ children, requiredRole = null, adminOnly = false }) =>
         adminOnly: adminOnly, 
         requiredRole: requiredRole, 
         isAdmin: isAdmin(), 
-        isAuthenticated: isAuthenticated() 
+        isAuthenticated: isAuthenticated(),
+        isTerminated: isTerminated()
     });
 
     if (loading) {
@@ -29,6 +30,12 @@ const ProtectedRoute = ({ children, requiredRole = null, adminOnly = false }) =>
     if (!isAuthenticated()) {
         console.log('❌ User not authenticated, redirecting to login');
         return <Navigate to="/login" state={{ from: location }} replace />;
+    }
+
+    // Check if employee is terminated
+    if (isTerminated()) {
+        console.log('❌ Access denied: Employee account is terminated');
+        return <AccessDenied reason="terminated" />;
     }
 
     // If admin only route and user is not admin

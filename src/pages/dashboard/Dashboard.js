@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import * as Dialog from '@radix-ui/react-dialog';
-import { Plus, Calendar, Clock, TrendingUp, LineChart, Clock4, Users, FileText, AlertTriangle, X, DollarSign, Package, Wallet, CheckCircle, Clock3, XCircle, FileImage, Image, Download } from 'lucide-react';
+import { Plus, Calendar, Clock, TrendingUp, LineChart, Clock4, Users, FileText, AlertTriangle, X, DollarSign, Package, Wallet, CheckCircle, Clock3, XCircle, FileImage, Image, Download, Pencil } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { adminApi, employeeApi, timesheetApi, leaveApi, timesheetComplianceApi, reimbursementApi, inventoryApi, supabase } from '../../utils/supabase';
 import './Dashboard.css';
@@ -51,6 +51,10 @@ const Dashboard = () => {
   const [receiptPreviewOpen, setReceiptPreviewOpen] = useState(false);
   const [selectedReimbursement, setSelectedReimbursement] = useState(null);
 
+  // Edit reimbursement state
+  const [editReimbursementOpen, setEditReimbursementOpen] = useState(false);
+  const [reimbursementToEdit, setReimbursementToEdit] = useState(null);
+
   const remainingSick = leaveSummary?.remaining_sick ?? 0;
   const remainingCasual = leaveSummary?.remaining_casual ?? 0;
   const totalLeaveBalance = remainingSick + remainingCasual;
@@ -99,6 +103,31 @@ const Dashboard = () => {
   const closeReceiptPreview = () => {
     setReceiptPreviewOpen(false);
     setSelectedReimbursement(null);
+  };
+
+  // Handle edit reimbursement click
+  const handleEditReimbursement = (request) => {
+    if (request.status === 'pending') {
+      setReimbursementToEdit(request);
+      setEditReimbursementOpen(true);
+    }
+  };
+
+  // Close edit reimbursement modal
+  const closeEditReimbursement = () => {
+    setEditReimbursementOpen(false);
+    setReimbursementToEdit(null);
+  };
+
+  // Handle successful reimbursement update
+  const handleReimbursementUpdateSuccess = (updatedRequest) => {
+    setReimbursementRequests(prev => 
+      prev.map(req => req.id === updatedRequest.id ? {
+        ...updatedRequest,
+        amount: parseFloat(updatedRequest.amount)
+      } : req)
+    );
+    closeEditReimbursement();
   };
 
   // Helper function to get receipt image URL from Supabase storage
@@ -897,6 +926,7 @@ const Dashboard = () => {
                   <th className="bodyMediumText3" style={{ color: '#215 13.8% 50.6%' }}>Date</th>
                   <th className="bodyMediumText3" style={{ color: '#215 13.8% 50.6%' }}>Receipt</th>
                   <th className="bodyMediumText3" style={{ color: '#215 13.8% 50.6%' }}>Status</th>
+                  <th className="bodyMediumText3" style={{ color: '#215 13.8% 50.6%' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -938,6 +968,30 @@ const Dashboard = () => {
                         {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
                       </span>
                     </td>
+                    <td>
+                      {request.status === 'pending' && (
+                        <button
+                          onClick={() => handleEditReimbursement(request)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '6px',
+                            border: 'none',
+                            backgroundColor: '#f3f4f6',
+                            cursor: 'pointer',
+                            transition: 'all 150ms ease'
+                          }}
+                          title="Edit request"
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#e5e7eb'}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#f3f4f6'}
+                        >
+                          <Pencil size={16} style={{ color: '#3b82f6' }} />
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -963,11 +1017,11 @@ const Dashboard = () => {
             <Dialog.Trigger asChild>
               <button className="quick-action-btn primary bodyMediumText3">
                 <Plus className="w-4 h-4" />
-                Request Item
+                Add Item
               </button>
             </Dialog.Trigger>
             <Dialog.Portal>
-              <Dialog.Overlay className="dialog-overlay" />
+              <Dialog.Overlay className="dialog-overlay"/>
               <Dialog.Content className="dialog-content">
                 <InventoryRequestForm
                   onClose={() => setInventoryDialogOpen(false)}
@@ -1455,6 +1509,31 @@ const Dashboard = () => {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Reimbursement Modal */}
+      {editReimbursementOpen && reimbursementToEdit && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '2rem'
+        }} onClick={closeEditReimbursement}>
+          <div onClick={(e) => e.stopPropagation()}>
+            <ReimbursementRequestForm
+              onClose={closeEditReimbursement}
+              onSuccess={handleReimbursementUpdateSuccess}
+              editRequest={reimbursementToEdit}
+            />
           </div>
         </div>
       )}

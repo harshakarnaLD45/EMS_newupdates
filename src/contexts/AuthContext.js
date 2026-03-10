@@ -154,6 +154,10 @@ export function AuthProvider({ children }) {
                 
             } catch (employeeError) {
                 console.error('❌ Employee authentication failed:', employeeError.message);
+                // Preserve the original error message for terminated employees
+                if (employeeError.message && employeeError.message.includes('terminated')) {
+                    throw employeeError;
+                }
                 throw new Error('Invalid employee email or password. Please check your credentials.');
             }
         } else {
@@ -170,6 +174,11 @@ export function AuthProvider({ children }) {
             } catch (adminError) {
                 //console.log('⚠️ Admin login failed, trying employee login:', adminError.message);
                 
+                // Preserve the original error message for terminated admins
+                if (adminError.message && adminError.message.includes('terminated')) {
+                    throw adminError;
+                }
+                
                 try {
                     //console.log('🔐 Attempting employee login');
                     const employeeUser = await authApi.signInEmployee(userData.email, userData.password);
@@ -181,6 +190,11 @@ export function AuthProvider({ children }) {
                     
                 } catch (employeeError) {
                     //console.log('⚠️ Employee login failed, trying Supabase auth:', employeeError.message);
+                    
+                    // Preserve the original error message for terminated employees
+                    if (employeeError.message && employeeError.message.includes('terminated')) {
+                        throw employeeError;
+                    }
                     
                     try {
                         // Final fallback to Supabase authentication
@@ -230,14 +244,29 @@ export function AuthProvider({ children }) {
     };
 
     const isAdmin = () => {
-        const result = user && (user.role === 'admin' || user.role === 'super_admin' || user.isAdmin === true || user.loginType === 'admin');
-        //console.log('🔍 isAdmin check:', { user: user, role: user?.role, isAdmin: user?.isAdmin, loginType: user?.loginType, result: result });
+        const result = user && (user.role === 'admin' || user.role === 'super_admin' || user.isAdmin === true || user.loginType === 'admin' || user.is_super_admin === true);
+        //console.log('🔍 isAdmin check:', { user: user, role: user?.role, isAdmin: user?.isAdmin, loginType: user?.loginType, is_super_admin: user?.is_super_admin, result: result });
+        return result;
+    };
+
+    const isSuperAdmin = () => {
+        // Check both boolean field and legacy role string for backward compatibility
+        const result = user && (user.is_super_admin === true || user.role === 'super_admin');
+        //console.log('🔍 isSuperAdmin check:', { user: user, role: user?.role, is_super_admin: user?.is_super_admin, result: result });
         return result;
     };
 
     const isEmployee = () => {
         const result = user && user.role === 'employee';
         //console.log('🔍 isEmployee check:', { user: user, role: user?.role, result: result });
+        return result;
+    };
+
+    const isTerminated = () => {
+        const status = user?.status?.toLowerCase();
+        // Check status field for employees, is_active field for admins
+        const result = status === 'terminated' || user?.is_active === false;
+        //console.log('🔍 isTerminated check:', { user: user, status: user?.status, is_active: user?.is_active, result: result });
         return result;
     };
 
@@ -250,7 +279,9 @@ export function AuthProvider({ children }) {
             logout,
             isAuthenticated,
             isAdmin,
-            isEmployee
+            isSuperAdmin,
+            isEmployee,
+            isTerminated
         }}>
             {children}
         </AuthContext.Provider>
