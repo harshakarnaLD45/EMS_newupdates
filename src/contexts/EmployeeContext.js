@@ -205,15 +205,23 @@ const loadEmployees = async () => {
             console.log('🔄 EmployeeContext: Terminating admin:', adminId);
             
             // Get current user's role from localStorage or context
-            const currentUser = JSON.parse(localStorage.getItem('ems_user') || '{}');
+            const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
             const currentUserRole = currentUser?.role;
+            const isCurrentUserSuperAdmin = currentUser?.is_super_admin === true || currentUserRole === 'super_admin';
             
-            // Check if current user is Super Admin
-            if (currentUserRole !== 'super_admin') {
+            console.log('🔍 Termination permission check:', {
+                currentUserRole,
+                isCurrentUserSuperAdmin,
+                adminId
+            });
+            
+            // Check if current user is Super Admin (using boolean field or legacy role)
+            if (!isCurrentUserSuperAdmin) {
+                console.error('❌ Access denied: Not Super Admin');
                 throw new Error("You don't have access to terminate these accounts.");
             }
             
-            const updatedAdmin = await employeeApi.terminateAdmin(adminId, currentUserRole);
+            const updatedAdmin = await employeeApi.terminateAdmin(adminId, currentUserRole, isCurrentUserSuperAdmin);
             
             // Update the admins state to reflect the terminated status
             setAdmins(prev => 
