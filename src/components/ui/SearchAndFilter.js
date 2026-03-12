@@ -15,11 +15,11 @@ const SearchAndFilter = ({
     onRoleChange,
     roles = ['All Roles', 'Admin', 'Employee'],
     placeholder = 'Search employees...'
-}) => { 
+}) => {
 
     return (
         <div className="filters-section">
-            <div className="search-bar" style={{minWidth:'60%'}}>
+            <div className="search-bar" style={{ minWidth: '60%' }}>
                 <Search size={20} />
                 <input
                     type="text"
@@ -28,7 +28,7 @@ const SearchAndFilter = ({
                     onChange={(e) => onSearchChange(e.target.value)}
                 />
             </div>
-            
+
             <Select
                 value={selectedDepartment}
                 onValueChange={onDepartmentChange}
@@ -62,20 +62,23 @@ const SearchAndFilter = ({
             </Select>
 
             <Select
-    value={selectedRole}
-    onValueChange={onRoleChange}
->
-    <SelectTrigger className="role-filter">
-        <SelectValue placeholder="Select Role" />
-    </SelectTrigger>
-    <SelectContent>
-        {roles.map(role => (
-            <SelectItem key={role} value={role}>
-                {role}
-            </SelectItem>
-        ))}
-    </SelectContent>
-</Select>
+                value={selectedRole}
+                onValueChange={onRoleChange}
+                // style={{ minWidth: '200px', maxWidth: '200px' }}
+                className="status-filter"
+            >
+                <SelectTrigger className="role-filter"
+                >
+                    <SelectValue placeholder="Select Role" />
+                </SelectTrigger>
+                <SelectContent>
+                    {roles.map(role => (
+                        <SelectItem key={role} value={role}>
+                            {role}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
 
         </div>
     );

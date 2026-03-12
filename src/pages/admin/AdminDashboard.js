@@ -916,6 +916,64 @@ const AdminDashboard = () => {
         }
     };
 
+    // Handle update payment status for approved reimbursement requests
+    const handleUpdatePaymentStatus = async (requestId, paymentStatus) => {
+        // Find the current request to check if already paid
+        const currentRequest = reimbursementRequests.find(req => req.id === requestId);
+        if (currentRequest?.Money_paid === 'Paid') {
+            console.error('❌ Payment status is finalized and cannot be changed');
+            alert('Payment has already been made. This status cannot be changed.');
+            return;
+        }
+        
+        // Prevent changing from Paid to any other status
+        if (currentRequest?.Money_paid === 'Paid' && paymentStatus !== 'Paid') {
+            console.error('❌ Cannot change payment status from Paid to', paymentStatus);
+            alert('Cannot change payment status once it has been marked as Paid.');
+            return;
+        }
+        
+        setProcessingReimbursementIds(prev => new Set(prev).add(requestId));
+        
+        try {
+            console.log('💰 Updating payment status:', requestId, paymentStatus);
+            
+            const { data, error } = await supabase
+                .from('reimbursement_requests')
+                .update({ 
+                    Money_paid: paymentStatus,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', requestId)
+                .select();
+            
+            if (error) {
+                console.error('❌ Error updating payment status:', error);
+                throw error;
+            }
+            
+            // Update local state
+            setReimbursementRequests(prev => 
+                prev.map(req => 
+                    req.id === requestId 
+                        ? { ...req, Money_paid: paymentStatus }
+                        : req
+                )
+            );
+            
+            console.log('✅ Payment status updated successfully:', data);
+        } catch (err) {
+            console.error('❌ Failed to update payment status:', err);
+            alert('Failed to update payment status. Please try again.');
+        } finally {
+            setProcessingReimbursementIds(prev => {
+                const newSet = new Set(prev);
+                newSet.delete(requestId);
+                return newSet;
+            });
+        }
+    };
+
     // Helper function to get receipt image URL from Supabase storage
     const getReceiptImageUrl = (request) => {
         // If we have a direct URL, use it
@@ -1156,6 +1214,7 @@ const AdminDashboard = () => {
                                     <th className="bodyMediumText3" style={{ color: '#6b7280' }}>Date</th>
                                     <th className="bodyMediumText3" style={{ color: '#6b7280' }}>Receipt</th>
                                     <th className="bodyMediumText3" style={{ color: '#6b7280' }}>Status</th>
+                                    <th className="bodyMediumText3" style={{ color: '#6b7280' }}>Payment Status</th>
                                     <th className="bodyMediumText3" style={{ color: '#6b7280' }}>Actions</th>
                                 </tr>
                             </thead>
@@ -1199,6 +1258,34 @@ const AdminDashboard = () => {
                                                 {request.status === 'pending' && <Clock size={14} style={{ marginRight: '4px' }} />}
                                                 {request.status === 'rejected' && <XCircle size={14} style={{ marginRight: '4px' }} />}
                                                 {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span 
+                                                className={`payment-status-badge ${request.Money_paid === 'Paid' ? 'paid' : 'unpaid'}`}
+                                                style={{
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    padding: '4px 12px',
+                                                    borderRadius: '12px',
+                                                    fontSize: '12px',
+                                                    fontWeight: '500',
+                                                    backgroundColor: request.Money_paid === 'Paid' ? '#dcfce7' : '#fee2e2',
+                                                    color: request.Money_paid === 'Paid' ? '#166534' : '#991b1b',
+                                                    border: `1px solid ${request.Money_paid === 'Paid' ? '#86efac' : '#fca5a5'}`
+                                                }}
+                                            >
+                                                {request.Money_paid === 'Paid' ? (
+                                                    <>
+                                                        <CheckCircle size={12} style={{ marginRight: '4px' }} />
+                                                        Paid
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Clock size={12} style={{ marginRight: '4px' }} />
+                                                        Unpaid
+                                                    </>
+                                                )}
                                             </span>
                                         </td>
                                         <td>
@@ -1278,6 +1365,40 @@ const AdminDashboard = () => {
                                                         <Trash2 size={16} style={{ color: '#ef4444' }} />
                                                     </button>
                                                 </div>
+                                            ) : request.status === 'approved' && request.Money_paid !== 'Paid' ? (
+                                                <select
+                                                    value={request.Money_paid || 'Unpaid'}
+                                                    onChange={(e) => handleUpdatePaymentStatus(request.id, e.target.value)}
+                                                    disabled={processingReimbursementIds.has(request.id)}
+                                                    style={{
+                                                        padding: '6px 12px',
+                                                        borderRadius: '6px',
+                                                        border: '1px solid #d1d5db',
+                                                        backgroundColor: '#ffffff',
+                                                        fontSize: '14px',
+                                                        cursor: processingReimbursementIds.has(request.id) ? 'not-allowed' : 'pointer',
+                                                        minWidth: '100px',
+                                                        opacity: processingReimbursementIds.has(request.id) ? 0.6 : 1
+                                                    }}
+                                                    title="Update payment status"
+                                                >
+                                                    <option value="Unpaid">Unpaid</option>
+                                                    <option value="Paid">Paid</option>
+                                                </select>
+                                            ) : request.status === 'approved' && request.Money_paid === 'Paid' ? (
+                                                <span 
+                                                    className="bodyRegularText5"
+                                                    style={{ 
+                                                        color: '#166534',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '4px',
+                                                        fontWeight: '500'
+                                                    }}
+                                                >
+                                                    <CheckCircle size={14} />
+                                                    Payment Done
+                                                </span>
                                             ) : (
                                                 <span className="no-action">—</span>
                                             )}

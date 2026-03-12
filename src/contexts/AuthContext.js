@@ -257,8 +257,10 @@ export function AuthProvider({ children }) {
     };
 
     const isEmployee = () => {
-        const result = user && user.role === 'employee';
-        //console.log('🔍 isEmployee check:', { user: user, role: user?.role, result: result });
+        // An employee is any authenticated user who is NOT an admin
+        // This handles cases where role might be undefined or null for new employees
+        const result = user && !isAdmin();
+        //console.log('🔍 isEmployee check:', { user: user, role: user?.role, isAdmin: isAdmin(), result: result });
         return result;
     };
 
@@ -270,6 +272,16 @@ export function AuthProvider({ children }) {
         return result;
     };
 
+    // Function to update user data (used by profile page after name changes)
+    const updateUser = (updates) => {
+        if (!user) return;
+        
+        const updatedUser = { ...user, ...updates };
+        setUser(updatedUser);
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        console.log('✅ User data updated:', updatedUser);
+    };
+
     return (
         <AuthContext.Provider value={{
             user,
@@ -277,6 +289,7 @@ export function AuthProvider({ children }) {
             loading,
             login,
             logout,
+            updateUser,
             isAuthenticated,
             isAdmin,
             isSuperAdmin,

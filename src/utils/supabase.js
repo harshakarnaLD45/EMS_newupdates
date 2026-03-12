@@ -97,15 +97,29 @@ export const authApi = {
         
         // console.log('✅ Admin login successful:', data.name);
         
+        // Build full name from first_name and last_name if available
+        const firstName = data.first_name || data.name?.split(' ')[0] || '';
+        const lastName = data.last_name || data.name?.split(' ').slice(1).join(' ') || '';
+        const fullName = data.name || `${firstName} ${lastName}`.trim() || 'Admin User';
+        
+        // console.log('✅ Admin login successful:', fullName);
+        
         // Return admin data in user format
         return {
             id: data.id,
             email: data.email,
-            name: data.name,
-            role: data.role || 'admin',
+            name: fullName,
+            first_name: firstName,
+            last_name: lastName,
+            role: data.is_super_admin ? 'super_admin' : (data.role || 'admin'),
             isAdmin: true,
-            is_active: data.is_active,
+            is_active: data.is_active !== false,
             is_super_admin: data.is_super_admin === true,
+            department: data.department || 'Administration',
+            position: data.position || (data.is_super_admin ? 'Super Administrator' : 'Administrator'),
+            phone: data.phone || '',
+            status: data.status || (data.is_active ? 'active' : 'terminated'),
+            join_date: data.join_date || data.created_at,
             loginType: 'admin'
         };
     },
@@ -1226,6 +1240,122 @@ export const employeeApi = {
         }
         
         return data;
+    },
+
+    // Get admin profile by admin id
+    async getAdminProfile(adminId) {
+        console.log('🔍 getAdminProfile called with adminId:', adminId);
+        
+        if (!adminId) {
+            throw new Error('Admin ID is required');
+        }
+        
+        // Try fetching by id first
+        let { data, error } = await supabase
+            .from('admins')
+            .select('*')
+            .eq('id', adminId)
+            .single();
+
+        // If not found by id, try admin_id field
+        if (error || !data) {
+            console.log('⚠️ Admin not found by id, trying admin_id field...');
+            const result = await supabase
+                .from('admins')
+                .select('*')
+                .eq('admin_id', adminId)
+                .single();
+            data = result.data;
+            error = result.error;
+        }
+
+        if (error) {
+            console.error('❌ Error fetching admin profile:', error);
+            throw error;
+        }
+        
+        if (!data) {
+            console.error('❌ No admin found with ID:', adminId);
+            throw new Error('Admin not found');
+        }
+        
+        console.log('✅ Admin data fetched:', data);
+        
+        // Build full name from first_name and last_name if available, otherwise use name field
+        const firstName = data.first_name || data.name?.split(' ')[0] || '';
+        const lastName = data.last_name || data.name?.split(' ').slice(1).join(' ') || '';
+        const fullName = data.name || `${firstName} ${lastName}`.trim() || 'Admin User';
+        
+        // Transform admin data to match employee profile structure
+        const transformed = {
+            id: data.id,
+            employee_id: data.admin_id || data.id, // Use admin_id if available, otherwise id
+            name: fullName,
+            first_name: firstName,
+            last_name: lastName,
+            email: data.email,
+            phone: data.phone || '',
+            department: data.department || 'Administration',
+            position: data.position || (data.is_super_admin ? 'Super Administrator' : 'Administrator'),
+            role: data.is_super_admin ? 'super_admin' : (data.role || 'admin'),
+            status: data.status || (data.is_active ? 'active' : 'terminated'),
+            is_active: data.is_active !== false, // Default to true if not set
+            is_super_admin: data.is_super_admin === true,
+            join_date: data.join_date || data.created_at,
+            created_at: data.created_at,
+            updated_at: data.updated_at,
+            terminated_at: data.terminated_at,
+            isAdmin: true
+        };
+        
+        console.log('✅ Transformed admin profile:', transformed);
+        return transformed;
+    },
+
+    // Update admin profile - only allow personal info updates
+    async updateAdminProfile(adminId, profileData) {
+        if (!adminId) {
+            throw new Error('Admin ID is required for updating profile');
+        }
+
+        // Only allow these fields to be updated by the user
+        const allowedFields = ['name', 'first_name', 'last_name', 'phone'];
+        const sanitizedUpdates = {};
+        
+        for (const field of allowedFields) {
+            if (profileData[field] !== undefined) {
+                sanitizedUpdates[field] = profileData[field];
+            }
+        }
+
+        // If first_name or last_name provided, update name field for backward compatibility
+        if (profileData.first_name || profileData.last_name) {
+            const firstName = profileData.first_name || '';
+            const lastName = profileData.last_name || '';
+            sanitizedUpdates.name = `${firstName} ${lastName}`.trim();
+        }
+        
+        // If name provided but not first_name/last_name, derive them
+        if (profileData.name && !profileData.first_name && !profileData.last_name) {
+            const nameParts = profileData.name.split(' ');
+            sanitizedUpdates.first_name = nameParts[0] || '';
+            sanitizedUpdates.last_name = nameParts.slice(1).join(' ') || '';
+        }
+
+        sanitizedUpdates.updated_at = new Date().toISOString();
+
+        const { data, error } = await supabase
+            .from('admins')
+            .update(sanitizedUpdates)
+            .eq('id', adminId)
+            .select();
+
+        if (error) {
+            console.error('❌ Error updating admin profile:', error);
+            throw error;
+        }
+
+        return data[0];
     }
 };
 
@@ -1386,10 +1516,48 @@ export const timesheetComplianceApi = {
     },
 
     /**
+     * Check if a date is covered by an approved or pending leave request
+     * @param {string} dateStr - Date to check in YYYY-MM-DD format
+     * @param {Array} leaveRequests - Array of leave request objects
+     * @returns {Object} - { isOnLeave: boolean, leaveDetails: object|null }
+     */
+    isDateCoveredByLeave(dateStr, leaveRequests) {
+        const checkDate = new Date(dateStr);
+        checkDate.setHours(0, 0, 0, 0);
+        
+        for (const leave of leaveRequests || []) {
+            const startDate = new Date(leave.start_date);
+            const endDate = new Date(leave.end_date);
+            startDate.setHours(0, 0, 0, 0);
+            endDate.setHours(0, 0, 0, 0);
+            
+            // Check if date falls within leave period
+            if (checkDate >= startDate && checkDate <= endDate) {
+                const status = (leave.status || '').toLowerCase();
+                // Consider both approved and pending leaves
+                if (status === 'approved' || status === 'pending') {
+                    return {
+                        isOnLeave: true,
+                        leaveDetails: {
+                            type: leave.leave_type,
+                            status: leave.status,
+                            startDate: leave.start_date,
+                            endDate: leave.end_date
+                        }
+                    };
+                }
+            }
+        }
+        
+        return { isOnLeave: false, leaveDetails: null };
+    },
+
+    /**
      * Check for missing timesheets and return warnings/auto-leave info
      * Day+1 = Warning, Day+2 = Auto Leave Deduction
      * Excludes weekends (Sundays) and holidays
      * Only checks current year - fresh start each year
+     * Validates: employee creation date, approved/pending leaves, holidays, weekends, leave balance
      */
     async checkMissingTimesheets(employeeId) {
         console.log('🔍 Checking missing timesheets for employee:', employeeId);
@@ -1404,24 +1572,68 @@ export const timesheetComplianceApi = {
         const result = {
             warnings: [],        // Days that need warning (Day+1)
             autoLeaveRequired: [], // Days that need auto-leave (Day+2)
-            processed: []        // Already processed auto-leaves
+            processed: [],       // Already processed auto-leaves
+            skipped: []          // Days skipped due to validation
         };
         
         try {
+            // Get employee details including created_at date
+            const { data: employee, error: empError } = await supabase
+                .from('employees')
+                .select('id, created_at, name')
+                .eq('id', employeeId)
+                .single();
+            
+            if (empError) {
+                console.error('❌ Error fetching employee details:', empError);
+                throw empError;
+            }
+            
+            if (!employee) {
+                console.error('❌ Employee not found:', employeeId);
+                throw new Error('Employee not found');
+            }
+            
+            const employeeCreatedAt = new Date(employee.created_at);
+            employeeCreatedAt.setHours(0, 0, 0, 0);
+            console.log(`👤 Employee created at: ${this.formatDateLocal(employeeCreatedAt)}`);
+            
             // Get holidays for the current year
             const holidays = await holidayApi.getHolidays(currentYear);
             const holidayDates = new Set(holidays.map(h => h.date));
             
-            // FRESH START: Always start from January 1st of current year
-            // Never check previous year's timesheets
-            const janFirst = new Date(currentYear, 0, 1); // January 1st of current year
-            janFirst.setHours(0, 0, 0, 0);
+            // Get approved and pending leave requests for the past week only
+            // This covers the check period (yesterday and potential Day+2 auto-leave dates)
+            const oneWeekAgo = new Date(today);
+            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+            const oneWeekAgoStr = this.formatDateLocal(oneWeekAgo);
             
-            // Start date is ALWAYS Jan 1st of current year (fresh start)
-            const startDate = janFirst;
-            const startDateStr = `${currentYear}-01-01`;
+            const { data: leaveRequests, error: leaveError } = await supabase
+                .from('leave_requests')
+                .select('start_date, end_date, status, leave_type, reason')
+                .eq('employee_id', employeeId)
+                .gte('start_date', oneWeekAgoStr)
+                .lte('end_date', todayStr)
+                .or('status.eq.approved,status.eq.pending');
             
-            console.log(`📅 Checking timesheets from ${startDateStr} (current year: ${currentYear}, today: ${today.toISOString().split('T')[0]})`);
+            if (leaveError) {
+                console.error('❌ Error fetching leave requests:', leaveError);
+                throw leaveError;
+            }
+            
+            console.log(`📋 Found ${leaveRequests?.length || 0} approved/pending leave requests (past 7 days)`);
+            
+            // Get current leave balance
+            const leaveBalance = await leaveApi.getLeaveBalance(employeeId);
+            const totalRemainingLeaves = (leaveBalance?.remaining_casual || 0) + (leaveBalance?.remaining_sick || 0);
+            console.log(`💼 Leave balance - Casual: ${leaveBalance?.remaining_casual || 0}, Sick: ${leaveBalance?.remaining_sick || 0}, Total: ${totalRemainingLeaves}`);
+            
+            // Use employee's account creation date as the starting point for compliance checks
+            // This ensures new employees are not penalized for dates before they joined
+            const startDate = employeeCreatedAt;
+            const startDateStr = this.formatDateLocal(startDate);
+            
+            console.log(`📅 Checking timesheets from ${startDateStr} (employee account creation date)`);
             
             const { data: timesheets, error: tsError } = await supabase
                 .from('timesheets')
@@ -1436,7 +1648,7 @@ export const timesheetComplianceApi = {
                 (timesheets || []).map(t => t.date?.split('T')[0])
             );
             
-            console.log('📋 Timesheets found for current year:', Array.from(timesheetDates));
+            console.log('📋 Timesheets found:', Array.from(timesheetDates));
             
             // Get existing auto-leave records to avoid duplicates
             // Use broader check - any leave for a single day in this period
@@ -1464,7 +1676,7 @@ export const timesheetComplianceApi = {
             
             console.log('📋 Existing auto-leave dates:', Array.from(autoLeaveDates));
             
-            // Check each day from startDate until yesterday (only current year)
+            // Check each day from startDate until yesterday
             const yesterday = new Date(today);
             yesterday.setDate(yesterday.getDate() - 1);
             const yesterdayStr = this.formatDateLocal(yesterday);
@@ -1474,17 +1686,30 @@ export const timesheetComplianceApi = {
             for (let d = new Date(startDate); d <= yesterday; d.setDate(d.getDate() + 1)) {
                 // Use local date format to avoid timezone issues
                 const dateStr = this.formatDateLocal(d);
-                const dateYear = d.getFullYear();
                 const dayOfWeek = d.getDay();
                 
-                // CRITICAL: Skip any date not in current year (extra safety check)
-                if (dateYear !== currentYear) {
-                    console.log(`⏭️ Skipping ${dateStr} - not in current year ${currentYear}`);
+                // VALIDATION 1: Skip Sundays (0 = Sunday)
+                if (dayOfWeek === 0) {
+                    console.log(`⏭️ Skipping ${dateStr} - Sunday (weekend)`);
+                    result.skipped.push({ date: dateStr, reason: 'Sunday (weekend)' });
                     continue;
                 }
                 
-                // Skip Sundays (0) and holidays
-                if (dayOfWeek === 0 || holidayDates.has(dateStr)) {
+                // VALIDATION 2: Skip holidays
+                if (holidayDates.has(dateStr)) {
+                    console.log(`⏭️ Skipping ${dateStr} - Holiday`);
+                    result.skipped.push({ date: dateStr, reason: 'Holiday' });
+                    continue;
+                }
+                
+                // VALIDATION 3: Skip if employee is on approved or pending leave (sick, casual, or any leave type)
+                const leaveCheck = this.isDateCoveredByLeave(dateStr, leaveRequests);
+                if (leaveCheck.isOnLeave) {
+                    console.log(`⏭️ Skipping ${dateStr} - Employee on ${leaveCheck.leaveDetails.status} ${leaveCheck.leaveDetails.type} leave`);
+                    result.skipped.push({ 
+                        date: dateStr, 
+                        reason: `On ${leaveCheck.leaveDetails.status} ${leaveCheck.leaveDetails.type} leave` 
+                    });
                     continue;
                 }
                 
@@ -1497,6 +1722,21 @@ export const timesheetComplianceApi = {
                 const daysDiff = Math.floor((today - d) / (1000 * 60 * 60 * 24));
                 
                 console.log(`❓ Missing timesheet for ${dateStr}, daysDiff: ${daysDiff}`);
+                
+                // VALIDATION 4: Check if employee has sufficient leave balance before auto-deducting
+                if (daysDiff >= 2 && totalRemainingLeaves <= 0) {
+                    console.log(`⏭️ Skipping ${dateStr} - Insufficient leave balance (Casual: ${leaveBalance?.remaining_casual || 0}, Sick: ${leaveBalance?.remaining_sick || 0})`);
+                    result.skipped.push({ 
+                        date: dateStr, 
+                        reason: 'Insufficient leave balance for auto-deduction' 
+                    });
+                    // Still add to warnings so employee knows they need to submit
+                    result.warnings.push({
+                        date: dateStr,
+                        message: `Timesheet for ${dateStr} is not submitted. Please submit immediately - no leave balance available for auto-deduction.`
+                    });
+                    continue;
+                }
                 
                 if (autoLeaveDates.has(dateStr)) {
                     // Already processed as auto-leave

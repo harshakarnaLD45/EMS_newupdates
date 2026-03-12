@@ -45,19 +45,19 @@ export default function ProfileHeader({ profile, isEditing, onEditToggle }) {
               <Badge 
                 variant="secondary" 
                 className={`w-fit ${
-                  profile?.status === 'active' 
+                  (profile?.status === 'active' || profile?.is_active !== false)
                     ? 'border-green-200 bg-green-50 text-green-700' 
                     : profile?.status === 'on_leave'
                     ? 'border-yellow-200 bg-yellow-50 text-yellow-700'
                     : 'border-gray-200 bg-gray-50 text-gray-700'
                 }`}
               >
-                {profile?.status || 'Active'}
+                {profile?.status || (profile?.is_active !== false ? 'Active' : 'Inactive')}
               </Badge>
             </div>
             
             <p className="text-muted-foreground font-medium">
-              {profile?.position || 'Employee'}
+              {profile?.position || (profile?.isAdmin ? (profile?.is_super_admin ? 'Super Administrator' : 'Administrator') : 'Employee')}
             </p>
             
             <div className="text-muted-foreground flex flex-wrap gap-4 text-sm">

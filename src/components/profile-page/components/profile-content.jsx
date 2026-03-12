@@ -301,19 +301,37 @@ export default function ProfileContent({
         </CardHeader>
         <CardContent>
           <div style={styles.formGrid}>
-            {/* Employee ID - LOCKED */}
-            <div style={styles.fieldContainer}>
-              <Label htmlFor="employee_id" style={styles.labelWithIcon}>
-                Employee ID
-                <Lock style={styles.lockIcon} />
-              </Label>
-              <Input 
-                id="employee_id" 
-                value={profile?.employee_id || 'N/A'}
-                disabled
-                style={styles.disabledInput}
-              />
-            </div>
+            {/* Employee ID - LOCKED (only for employees) */}
+            {!profile?.isAdmin && (
+              <div style={styles.fieldContainer}>
+                <Label htmlFor="employee_id" style={styles.labelWithIcon}>
+                  Employee ID
+                  <Lock style={styles.lockIcon} />
+                </Label>
+                <Input 
+                  id="employee_id" 
+                  value={profile?.employee_id || 'N/A'}
+                  disabled
+                  style={styles.disabledInput}
+                />
+              </div>
+            )}
+
+            {/* Admin ID - LOCKED (only for admins) */}
+            {profile?.isAdmin && (
+              <div style={styles.fieldContainer}>
+                <Label htmlFor="admin_id" style={styles.labelWithIcon}>
+                  Admin ID
+                  <Lock style={styles.lockIcon} />
+                </Label>
+                <Input 
+                  id="admin_id" 
+                  value={profile?.admin_id || profile?.employee_id || profile?.id || 'N/A'}
+                  disabled
+                  style={styles.disabledInput}
+                />
+              </div>
+            )}
 
             {/* Department - LOCKED */}
             <div style={styles.fieldContainer}>
@@ -323,7 +341,7 @@ export default function ProfileContent({
               </Label>
               <Input 
                 id="department" 
-                value={profile?.department || 'N/A'}
+                value={profile?.department || (profile?.isAdmin ? 'Administration' : 'N/A')}
                 disabled
                 style={styles.disabledInput}
               />
@@ -337,7 +355,7 @@ export default function ProfileContent({
               </Label>
               <Input 
                 id="position" 
-                value={profile?.position || 'N/A'}
+                value={profile?.position || (profile?.isAdmin ? (profile?.is_super_admin ? 'Super Administrator' : 'Administrator') : 'N/A')}
                 disabled
                 style={styles.disabledInput}
               />
@@ -351,7 +369,7 @@ export default function ProfileContent({
               </Label>
               <Input 
                 id="role" 
-                value={profile?.role || 'Employee'}
+                value={profile?.is_super_admin ? 'Super Admin' : (profile?.role || 'Employee')}
                 disabled
                 style={styles.disabledInputCapitalize}
               />
@@ -360,12 +378,12 @@ export default function ProfileContent({
             {/* Join Date - LOCKED */}
             <div style={styles.fieldContainer}>
               <Label htmlFor="join_date" style={styles.labelWithIcon}>
-                Join Date
+                {profile?.isAdmin ? 'Account Created' : 'Join Date'}
                 <Lock style={styles.lockIcon} />
               </Label>
               <Input 
                 id="join_date" 
-                value={formatDate(profile?.join_date)}
+                value={formatDate(profile?.join_date || profile?.created_at)}
                 disabled
                 style={styles.disabledInput}
               />
@@ -374,15 +392,15 @@ export default function ProfileContent({
             {/* Status - LOCKED */}
             <div style={styles.fieldContainer}>
               <Label htmlFor="status" style={styles.labelWithIcon}>
-                Employment Status
+                {profile?.isAdmin ? 'Account Status' : 'Employment Status'}
                 <Lock style={styles.lockIcon} />
               </Label>
               <div style={styles.statusContainer}>
                 <Badge 
                   variant="secondary"
-                  style={getStatusBadgeStyle(profile?.status)}
+                  style={getStatusBadgeStyle(profile?.status || (profile?.is_active !== false ? 'active' : 'terminated'))}
                 >
-                  {profile?.status?.replace('_', ' ') || 'Active'}
+                  {(profile?.status || (profile?.is_active !== false ? 'active' : 'terminated'))?.replace('_', ' ')}
                 </Badge>
               </div>
             </div>
