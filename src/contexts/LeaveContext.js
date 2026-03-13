@@ -66,7 +66,16 @@ export function LeaveProvider({ children }) {
     // Load data when user changes
     useEffect(() => {
         if (user) {
-            console.log('User logged in, loading leave data...', user);
+            // Skip leave data loading for admins - they don't have employee records
+            if (user.role === 'admin' || user.isAdmin) {
+                console.log('Admin user detected, skipping leave data load');
+                setLeaveRequests([]);
+                setLeaveSetting(null);
+                setLeaveSummary({ used_casual: 0, used_sick: 0, remaining_casual: 0, remaining_sick: 0 });
+                setLoading(false);
+                return;
+            }
+            console.log('Employee user logged in, loading leave data...', user);
             loadLeaveData();
         } else {
             setLeaveRequests([]);

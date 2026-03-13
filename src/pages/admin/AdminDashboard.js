@@ -495,20 +495,21 @@ const AdminDashboard = () => {
                 //console.log('✅ Successfully loaded real data from Supabase');
             } else {
                 ////console.log('⚠️ No activity data found - this might be expected if no leave requests exist');
-                setError('No leave requests found in database.');
+                // Don't set error for empty activity - this is normal when no leave requests exist
             }
 
         } catch (error) {
             console.error('❌ Critical error loading dashboard data:', error);
             setError(`Failed to load data: ${error.message}`);
 
-            // Set fallback empty stats to prevent undefined errors
-            setDashboardStats({
-                totalEmployees: { count: 0, change: 'Database connection error' },
-                activeToday: { count: 0, rate: 'Unable to calculate' },
-                onLeave: { count: 0, details: 'Data unavailable' },
-                pendingApprovals: { count: 0, details: 'Cannot load requests' }
-            });
+            // Only set fallback empty stats if we don't already have valid stats
+            // This prevents employee count from disappearing when minor errors occur
+            setDashboardStats(prev => ({
+                totalEmployees: prev.totalEmployees?.count > 0 ? prev.totalEmployees : { count: 0, change: 'Database connection error' },
+                activeToday: prev.activeToday?.count > 0 ? prev.activeToday : { count: 0, rate: 'Unable to calculate' },
+                onLeave: prev.onLeave?.count > 0 ? prev.onLeave : { count: 0, details: 'Data unavailable' },
+                pendingApprovals: prev.pendingApprovals?.count > 0 ? prev.pendingApprovals : { count: 0, details: 'Cannot load requests' }
+            }));
 
             setRecentActivity([]);
         } finally {
@@ -1366,7 +1367,7 @@ const AdminDashboard = () => {
                                                     </button>
                                                 </div>
                                             ) : request.status === 'approved' && request.Money_paid !== 'Paid' ? (
-                                                <select
+                                                <select className="bodyRegularText5"
                                                     value={request.Money_paid || 'Unpaid'}
                                                     onChange={(e) => handleUpdatePaymentStatus(request.id, e.target.value)}
                                                     disabled={processingReimbursementIds.has(request.id)}

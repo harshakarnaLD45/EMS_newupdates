@@ -1933,7 +1933,7 @@ export const adminApi = {
         const { data, error } = await supabase
             .from('admins')
             .select('*')
-            .order('created_at', { ascending: false });
+            .order('createdAt', { ascending: false });
 
         if (error) {
             console.error('❌ Error fetching admins:', error);

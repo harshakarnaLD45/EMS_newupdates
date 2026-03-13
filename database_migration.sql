@@ -31,17 +31,27 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- ==========================================
 -- 1. ADMINS TABLE
 -- ==========================================
-CREATE TABLE IF NOT EXISTS public.admins (
-    id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
-    name varchar NOT NULL,
-    email varchar UNIQUE NOT NULL,
-    password varchar NOT NULL,
-    role varchar DEFAULT 'admin',
+CREATE TABLE public.admins (
+    id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name varchar,
+    email varchar UNIQUE,
+    password varchar,
+    role varchar,
     is_active boolean DEFAULT true,
-    is_super_admin boolean DEFAULT false,
-    created_at timestamptz DEFAULT now(),
-    updated_at timestamptz DEFAULT now()
+    createdAt timestamptz DEFAULT now(),
+    updatedAt timestamptz DEFAULT now(),
+    admin_id uuid UNIQUE DEFAULT uuid_generate_v4(),
+    first_name text,
+    last_name text,
+    phone text,
+    department text,
+    position text,
+    status text,
+    join_date date,
+    terminated_at timestamptz,
+    is_super_admin boolean DEFAULT false
 );
+
 
 -- ==========================================
 -- 2. EMPLOYEES TABLE
@@ -60,6 +70,7 @@ CREATE TABLE IF NOT EXISTS public.employees (
     join_date date DEFAULT CURRENT_DATE,
     terminated_at timestamptz,
     password_hash varchar,
+    role varchar,
     created_at timestamptz DEFAULT now(),
     updated_at timestamptz DEFAULT now()
 );
@@ -444,7 +455,9 @@ CREATE TABLE IF NOT EXISTS public.reimbursement_requests (
     receipt_size INTEGER,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now(),
-    FOREIGN KEY (employee_id) REFERENCES public.employees(employee_id) ON DELETE CASCADE
+    FOREIGN KEY (employee_id) REFERENCES public.employees(employee_id) ON DELETE CASCADE,
+    receipt_path TEXT NOT NULL,
+    money_paid TEXT NOT NULL
 );
 
 -- Indexes for reimbursement_requests
